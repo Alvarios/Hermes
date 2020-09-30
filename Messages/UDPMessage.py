@@ -4,7 +4,7 @@
 This module provides a class that represent a general message that can be used for UDP communication.
 """
 
-from typing import NoReturn, Union
+from typing import NoReturn, Union, Optional
 import time
 import zlib
 
@@ -42,7 +42,7 @@ class UDPMessage:
             message_nb : The message number of the message in this topic.
             crc : The CRC32 of the message.
 
-        """
+    """
     MSG_ID_LENGTH = 4
     TIME_CREATION_LENGTH = 8
     TOPIC_LENGTH = 4
@@ -53,8 +53,9 @@ class UDPMessage:
     PAYLOAD_MAX_SIZE = MSG_MAX_SIZE - MSG_ID_LENGTH - TIME_CREATION_LENGTH - TOPIC_LENGTH - \
                        MSG_NUMBER_LENGTH - CRC_LENGTH
 
-    def __init__(self, msg_id: Union[bytes, int] = bytes(), payload: Union[bytes, str] = bytes(),
-                 topic: Union[bytes, int] = bytes(), message_nb: Union[bytes, int] = bytes()) -> NoReturn:
+    def __init__(self, msg_id: Optional[Union[bytes, int]] = bytes(), payload: Optional[Union[bytes, str]] = bytes(),
+                 topic: Optional[Union[bytes, int]] = bytes(),
+                 message_nb: Optional[Union[bytes, int]] = bytes()) -> None:
         """Create a new message with given parameters.
 
         :param msg_id: The id of the message. It tells what to do with incoming message.
