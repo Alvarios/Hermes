@@ -15,14 +15,29 @@ class UDPSocket(Thread):
 
 
         Attributes :
-            encryption_in_transit : Define if the connection must be secure.
+            socket_ip: The ip used to bind the socket.
+            socket_port: The port used to bind the socket.
+            encryption_in_transit : Define if the messages must be encrypted.
             max_queue_size : The max size of message queue.
-
+            buffer_size : The max size of the received message buffer.
+            socket : The socket object used for udp communication.
+            is_running : A flag that specify if the socket is currently running.
+            key : The encryption key used to encrypt message. If no value is provided it will generate a new one.
+            fernet_encoder : The encoder used to encrypt and decrypt messages.
     """
 
     def __init__(self, socket_ip: Optional[str] = "127.0.0.1", socket_port: Optional[int] = 50000,
                  encryption_in_transit: Optional[bool] = False, max_queue_size: Optional[int] = 100,
                  buffer_size: Optional[int] = 65543, key: Optional[Union[None, bytes]] = None) -> None:
+        """Create a new UDPSocket object with given parameters.
+
+        :param socket_ip: The ip used to bind the socket.
+        :param socket_port: The port used to bind the socket.
+        :param encryption_in_transit: Define if the messages must be encrypted.
+        :param max_queue_size: The max size of message queue.
+        :param buffer_size: The max size of the received message buffer.
+        :param key: The encryption key used to encrypt message. If no value is provided it will generate a new one.
+        """
         Thread.__init__(self)
         self.socket_ip = socket_ip
         self.socket_port = socket_port
@@ -36,22 +51,26 @@ class UDPSocket(Thread):
         self.fernet_encoder = Fernet(self.key)
 
     def start_socket(self) -> NoReturn:
+        """Start the socket and run the listening thread."""
         self.is_running = True
         self.socket.bind((self.socket_ip, self.socket_port))
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.start()
 
     def run(self) -> NoReturn:
+        """Main loop of the listening thread."""
         while self.is_running:
             self.listen()
 
     def stop_socket(self) -> NoReturn:
+        """Stop the listening thread."""
         self.is_running = False
         self.socket.shutdown(socket.SHUT_RD)
         self.socket.close()
         self.join()
 
     def listen(self) -> NoReturn:
+        """Add incoming messages to the queue and decrypt it if needed."""
         try:
             rcv_msg = self.socket.recvfrom(self.buffer_size)
             if rcv_msg == bytes():
@@ -66,6 +85,11 @@ class UDPSocket(Thread):
 
     def sendto(self, msg: Optional[bytes] = bytes,
                address_port: Optional[Union[Tuple[str, int], None]] = None) -> NoReturn:
+        """Send a message to given network endpoint.
+
+        :param msg: The data to send.
+        :param address_port: A tuple of ip address and port of the target network endpoint.
+        """
         if self.encryption_in_transit:
             msg = self.fernet_encoder.encrypt(msg)
         try:
@@ -73,10 +97,18 @@ class UDPSocket(Thread):
         except OSError:
             pass
 
-    def pull(self):
+    def pull(self) -> Tuple[bytes, Any]:
+        """Return the first message of the queue and remove it.
+
+        :return msg_address_port: The first message of the queue.
+        """
         return self.queue.pop(0)
 
-    def change_key(self, new_key: bytes):
+    def change_key(self, new_key: bytes) -> NoReturn:
+        """Change the encryption key of the socket and create a new fernet_encoder.
+
+        :param new_key: The new key to use for encryption.
+        """
         self.key = new_key
         self.fernet_encoder = Fernet(self.key)
 
