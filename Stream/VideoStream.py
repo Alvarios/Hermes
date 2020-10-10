@@ -38,23 +38,45 @@ class VideoStream:
     NB_MSG_HEADER = 0
 
     def __init__(self, max_packet_size: Optional[int] = 5000) -> None:
+        """Create a new VideoStream with given parameters.
+
+        :param max_packet_size: The max size of a packet (in byte).
+        """
         self.current_image: np.array = np.array([])
         self.max_packet_size = max_packet_size
 
     def refresh_image(self, new_image: np.array) -> NoReturn:
+        """Replace current_image by new_image.
+
+        :param new_image:
+        """
         if len(new_image.shape) > 3 or len(new_image.shape) < 2 or (
                 len(new_image.shape) == 3 and new_image.shape[2] != 3):
             raise ValueError
         self.current_image = new_image
 
     def split_image(self) -> List[bytes]:
-        flat_img = list(self.current_image.flatten())
+        """Split current_image into bytes with a maximal length of max_packet_size.
+
+        :return list_split_img: A list of bytes representing the current_image.
+        """
+        flat_img = self.current_image.flatten()
         return [bytes(flat_img[i * self.max_packet_size: self.max_packet_size + i * self.max_packet_size]) for i in
                 range(math.ceil(np.array(self.current_image.shape).prod() / self.max_packet_size))]
 
     @staticmethod
     def get_header_msg(topic: int, nb_packet: int, total_bytes: int, height: int, length: int,
                        pixel_size: int) -> bytes:
+        """Return a UDPMessage with image metadata.
+
+        :param topic: The topic associated to the image.
+        :param nb_packet: The total number of data packet that will be send.
+        :param total_bytes: The total number of bytes of the image.
+        :param height: The height of the image.
+        :param length: The length of the image.
+        :param pixel_size: The size of a pixel.
+        :return header_msg: The UDPMessage containing image metadata.
+        """
         return UDPMessage(msg_id=VideoStream.VIDEO_PACKET_ID, topic=topic, message_nb=VideoStream.NB_MSG_HEADER,
                           payload=nb_packet.to_bytes(VideoStream.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
                               VideoStream.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(VideoStream.HEIGHT_SIZE,
@@ -63,9 +85,18 @@ class VideoStream:
                               VideoStream.SIZE_PIXEL_SIZE, 'little')).to_bytes()
 
     def get_pixel_size(self) -> int:
+        """Return the size of a pixel.
+
+        :return pixel_size: The size of a pixel.
+        """
         return 3 if len(self.current_image.shape) == 3 else 1
 
     def get_messages(self, topic: int) -> List[bytes]:
+        """Return a list of bytes representing the messages to send.
+
+        :param topic: The topic associated to the image.
+        :return messages: The list of bytes representing the messages to send.
+        """
         img_split = self.split_image()
         img_messages = [
             UDPMessage(msg_id=VideoStream.VIDEO_PACKET_ID, payload=e, topic=topic, message_nb=i + 1).to_bytes() for i, e
@@ -74,6 +105,7 @@ class VideoStream:
                                             self.current_image.shape[0], self.current_image.shape[1],
                                             self.get_pixel_size())
         to_return = [header] + img_messages
+        # to_return = [header]
         return to_return
 
 
@@ -83,15 +115,26 @@ class VideoTopic:
         Attributes :
             nb_packet : The number of expected packets.
             total_bytes : The expected total size of the image.
+            height : The height of the image.
+            length : The length of the image.
             pixel_size : The size of pixel in bytes.
             time_creation : The time of creation of the topic.
             rcv_messages : The list of received packets.
             rcv_error : A flag that tell if a reception error has been detected.
-            count_rcv_msg : Count the number of message that have been received
+            count_rcv_msg : Count the number of message that have been received.
 
     """
 
     def __init__(self, nb_packet, total_bytes, height, length, pixel_size, time_creation) -> None:
+        """Create a new VideoTopic object.
+
+        :param nb_packet: The number of expected packets.
+        :param total_bytes: The expected total size of the image.
+        :param height: The height of the image.
+        :param length: The length of the image.
+        :param pixel_size: The size of pixel in bytes.
+        :param time_creation: The time of creation of the topic.
+        """
         self.nb_packet: int = nb_packet
         self.total_bytes: int = total_bytes
         self.height = height
@@ -142,26 +185,43 @@ class VideoTopic:
             raise ValueError
         self._time_creation = value
 
-    def add_message(self, new_message: UDPMessage):
+    def add_message(self, new_message: UDPMessage) -> NoReturn:
+        """Add a message to the topic.
+
+        The position of the message in rcv_message list will depend on message_nb (start at 1).
+
+        :param new_message: The message to add to the topic.
+        """
         self.count_rcv_msg += 1
-        if int.from_bytes(new_message.message_nb, 'little') > self.nb_packet or int.from_bytes(new_message.message_nb,
-                                                                                               'little') <= 0:
+        if int.from_bytes(new_message.message_nb, 'little') > self.nb_packet or int.from_bytes(new_message.message_nb,                                                                                               'little') <= 0:
             self.rcv_error = True
             return
         self.rcv_messages[int.from_bytes(new_message.message_nb, 'little') - 1] = new_message
         if new_message.check_crc() is False:
             self.rcv_error = True
 
-    def all_msg_received(self):
+    def all_msg_received(self) -> bool:
+        """Return True if all messages of the topic have been received else False.
+
+        :return all_msg_received: A bool that tell if all messages have been received.
+        """
         return self.count_rcv_msg == self.nb_packet
 
-    def total_bytes_correct(self):
+    def total_bytes_correct(self) -> bool:
+        """Check if the expected number of bytes is equal to the received number of bytes.
+
+        :return total_bytes_correct: A bool that tell if a correct number of bytes have been received.
+        """
         if self.all_msg_received():
             return np.array(
                 [len(i.payload) if i is not None else 0 for i in self.rcv_messages]).sum() == self.total_bytes
         return False
 
-    def rebuild_img(self):
+    def rebuild_img(self) -> np.array:
+        """Return an image as numpy array if all required messages have been received and nor error is detected.
+
+        :return image: The image encoded in the received messages. None if an error is detected.
+        """
         if self.total_bytes % self.pixel_size != 0 or self.total_bytes % self.height != 0 or self.total_bytes % self.length != 0:
             return None
         if self.pixel_size != 1:
@@ -173,6 +233,11 @@ class VideoTopic:
 
     @staticmethod
     def from_message(new_msg: UDPMessage):
+        """Create a new VideoTopic from a UDPMessage.
+
+        :param new_msg: The message used to create VideoTopic.
+        :return new_topic: A new VideoTopic created from input message.
+        """
         payload = new_msg.payload
         cursor_pos = 0
         nb_packet = int.from_bytes(payload[cursor_pos:cursor_pos + VideoStream.NB_PACKET_SIZE], 'little')
@@ -191,7 +256,8 @@ class VideoTopic:
 if __name__ == "__main__":
     import cv2
 
-    vs = VideoStream()
+    # vs = VideoStream(max_packet_size=UDPMessage.PAYLOAD_MAX_SIZE)
+    vs = VideoStream(max_packet_size=UDPMessage.PAYLOAD_MAX_SIZE)
     cv2.namedWindow("preview")
     vc = cv2.VideoCapture(0)
 
@@ -206,18 +272,15 @@ if __name__ == "__main__":
         # print(vs.current_image.shape)
         # print(np.array(vs.current_image.shape).prod())
         msg = vs.get_messages(10)
-        # tmp = np.array([len(list(UDPMessage.from_bytes(i).payload)) for i in msg[1:]]).sum()
-        # print(tmp, np.array(vs.current_image.shape).prod())
-        # print(len(msg[1:]))
+        tmp = np.array([len(list(UDPMessage.from_bytes(i).payload)) for i in msg[1:]]).sum()
+
         topic = VideoTopic.from_message(UDPMessage.from_bytes(msg[0]))
-        # print(topic.height, topic.length, topic.pixel_size, topic.total_bytes)
+
         for i in msg[1:]:
             topic.add_message(UDPMessage.from_bytes(i))
         test_frame: np.array = topic.rebuild_img()
-        # print(np.array_equiv(frame, test_frame))
-        # print(np.dtype(test_frame[0, 0, 0]))
-        # print(np.dtype(frame[0, 0, 0]))
 
+        # cv2.imshow("preview", frame)
         cv2.imshow("preview", test_frame)
         key = cv2.waitKey(20)
         if key == 27:  # exit on ESC

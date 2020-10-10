@@ -1,22 +1,30 @@
-import cv2
+# import cv2
+#
+#
+# cv2.namedWindow("preview")
+# vc = cv2.VideoCapture(0)
+#
+# if vc.isOpened(): # try to get the first frame
+#     rval, frame = vc.read()
+#     print(type(rval), type(frame))
+# else:
+#     rval = False
+#
+# while rval:
+#     cv2.imshow("preview", frame)
+#     rval, frame = vc.read()
+#     key = cv2.waitKey(20)
+#     print(frame[0])
+#     print(frame.shape)
+#     print(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).shape)
+#     if key == 27: # exit on ESC
+#         break
+# cv2.destroyWindow("preview")
+from functools import reduce
 
+tst = 90000 * [0]
+packet_size = 1000
+try1 = [tst[i * packet_size: i * packet_size + 1] for i in range(len(tst) // packet_size)]
+print(len(try1))
 
-cv2.namedWindow("preview")
-vc = cv2.VideoCapture(0)
-
-if vc.isOpened(): # try to get the first frame
-    rval, frame = vc.read()
-    print(type(rval), type(frame))
-else:
-    rval = False
-
-while rval:
-    cv2.imshow("preview", frame)
-    rval, frame = vc.read()
-    key = cv2.waitKey(20)
-    print(frame[0])
-    print(frame.shape)
-    print(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).shape)
-    if key == 27: # exit on ESC
-        break
-cv2.destroyWindow("preview")
+try2 = []
