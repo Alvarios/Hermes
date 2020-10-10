@@ -87,7 +87,7 @@ def test_new_udp_message_created_with_correct_topic_when_type_int():
 
 def test_new_udp_message_created_with_correct_message_nb_when_type_bytes():
     # Given
-    message_nb = bytes([1, 0])
+    message_nb = bytes(UDPMessage.MSG_NUMBER_LENGTH * [1])
 
     # When
     msg = UDPMessage(message_nb=message_nb)
@@ -98,7 +98,7 @@ def test_new_udp_message_created_with_correct_message_nb_when_type_bytes():
 
 def test_new_udp_message_created_with_correct_message_nb_when_type_int():
     # Given
-    expected_message_nb = bytes([1, 0])
+    expected_message_nb = bytes([1] + (UDPMessage.MSG_NUMBER_LENGTH - 1) * [0])
     message_nb = 1
 
     # When
@@ -236,7 +236,7 @@ def test_to_bytes_returns_full_message_as_bytes():
 
 def test_from_bytes_correctly_load_a_message():
     # Given
-    message_nb = bytes([2, 0])
+    message_nb = bytes(UDPMessage.MSG_NUMBER_LENGTH * [1])
     payload = bytes([49, 49, 49, 49])
     msg_id = bytes([48, 48, 48, 48])
     topic = bytes([1, 0, 0, 0])

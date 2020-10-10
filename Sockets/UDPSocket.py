@@ -24,11 +24,14 @@ class UDPSocket(Thread):
             is_running : A flag that specify if the socket is currently running.
             key : The encryption key used to encrypt message. If no value is provided it will generate a new one.
             fernet_encoder : The encoder used to encrypt and decrypt messages.
+            enable_multicast : Specify if the socket can use multicast.
+            multicast_ttl : The TTL used for multicast.
     """
 
     def __init__(self, socket_ip: Optional[str] = "127.0.0.1", socket_port: Optional[int] = 50000,
                  encryption_in_transit: Optional[bool] = False, max_queue_size: Optional[int] = 100,
-                 buffer_size: Optional[int] = 65543, key: Optional[Union[None, bytes]] = None) -> None:
+                 buffer_size: Optional[int] = 65543, key: Optional[Union[None, bytes]] = None,
+                 enable_multicast: Optional[bool] = False, multicast_ttl: Optional[int] = 2) -> None:
         """Create a new UDPSocket object with given parameters.
 
         :param socket_ip: The ip used to bind the socket.
@@ -37,6 +40,8 @@ class UDPSocket(Thread):
         :param max_queue_size: The max size of message queue.
         :param buffer_size: The max size of the received message buffer.
         :param key: The encryption key used to encrypt message. If no value is provided it will generate a new one.
+        :param enable_multicast: Specify if the socket can use multicast.
+        :param multicast_ttl: The TTL used for multicast.
         """
         Thread.__init__(self)
         self.socket_ip = socket_ip
@@ -49,12 +54,16 @@ class UDPSocket(Thread):
         self.is_running: bool = False
         self.key: bytes = key if key is not None else Fernet.generate_key()
         self.fernet_encoder = Fernet(self.key)
+        self.enable_multicast = enable_multicast
+        self.multicast_ttl = multicast_ttl
 
     def start_socket(self) -> NoReturn:
         """Start the socket and run the listening thread."""
         self.is_running = True
         self.socket.bind((self.socket_ip, self.socket_port))
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if self.enable_multicast:
+            self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, self.multicast_ttl)
         self.start()
 
     def run(self) -> NoReturn:
@@ -114,10 +123,7 @@ class UDPSocket(Thread):
 
 
 if __name__ == "__main__":
-    tst_1 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    tst_2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    tst_1.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    tst = [1, 2]
-    tst.append(3)
-    print(tst.pop(0))
-    print(tst)
+    print(socket.INADDR_ANY)
+    # tst_1 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    # tst_2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    # tst_1.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

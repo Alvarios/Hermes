@@ -11,6 +11,8 @@ requests = "*"
 cryptography = "*"
 pytest = "*"
 raw-zlib = "*"
+numpy = "*"
+opencv-python = "*"
 
 [requires]
 python_version = "3.7"

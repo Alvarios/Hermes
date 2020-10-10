@@ -4,7 +4,7 @@
 This module provides a class that represent a general message that can be used for UDP communication.
 """
 
-from typing import NoReturn, Union, Optional
+from typing import Union, Optional
 import time
 import zlib
 
@@ -46,7 +46,7 @@ class UDPMessage:
     MSG_ID_LENGTH = 4
     TIME_CREATION_LENGTH = 8
     TOPIC_LENGTH = 4
-    MSG_NUMBER_LENGTH = 2
+    MSG_NUMBER_LENGTH = 4
     CRC_LENGTH = 4
     PADDING_VALUE = 0
     MSG_MAX_SIZE = 65535
@@ -91,7 +91,7 @@ class UDPMessage:
         self.crc = zlib.crc32(self.full_content).to_bytes(UDPMessage.CRC_LENGTH, 'little')
 
     def check_crc(self) -> bool:
-        """Return True if crc is correct els False
+        """Return True if crc is correct else False
 
         :return crc_correct: The result of crc check.
         """
@@ -133,6 +133,7 @@ class UDPMessage:
         msg = UDPMessage(msg_id=msg_id, payload=payload, message_nb=message_nb, topic=topic)
         msg.time_creation = time_creation
         msg.crc = crc
+        msg.full_content = msg.msg_id + msg.time_creation + msg.topic + msg.message_nb + msg.payload
         if msg.check_crc():
             return msg
 

@@ -4,6 +4,7 @@ import socket
 import time
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
+import struct
 
 
 def test_new_udp_socket_correctly_set_encryption_in_transit():
@@ -11,7 +12,7 @@ def test_new_udp_socket_correctly_set_encryption_in_transit():
     encryption_in_transit = False
 
     # When
-    udp_socket = UDPSocket(encryption_in_transit=False)
+    udp_socket = UDPSocket(encryption_in_transit=encryption_in_transit)
 
     # Then
     assert udp_socket.encryption_in_transit is encryption_in_transit
@@ -286,3 +287,66 @@ def test_udp_socket_can_read_encrypted_messages_when_encryption_in_transit_set_t
 
     # Then
     assert udp_socket.pull()[0] == msg
+
+
+def test_new_udp_socket_correctly_set_enable_multicast():
+    # Given
+    enable_multicast = True
+
+    # When
+    udp_socket = UDPSocket(enable_multicast=enable_multicast)
+
+    # Then
+    assert udp_socket.enable_multicast is enable_multicast
+
+
+def test_new_udp_socket_correctly_set_multicast_ttl():
+    # Given
+    multicast_ttl = 3
+
+    # When
+    udp_socket = UDPSocket(multicast_ttl=multicast_ttl)
+
+    # Then
+    assert udp_socket.multicast_ttl is multicast_ttl
+
+
+def test_send_to_correctly_send_message_to_multicast_group():
+    # Given
+    msg = b"test"
+
+    multicast_ttl = 2
+    socket_ip = "192.168.50.150"
+    socket_port = 50000
+    max_queue_size = 10
+
+    mcast_grp = '224.0.0.2'
+    mcast_port = 50001
+
+    udp_socket = UDPSocket(multicast_ttl=multicast_ttl, enable_multicast=True, socket_ip=socket_ip,
+                           socket_port=socket_port, max_queue_size=max_queue_size)
+
+    test_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    test_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    test_socket.bind(('', mcast_port))
+    mreq = struct.pack("4sL", socket.inet_aton(mcast_grp), socket.INADDR_ANY)
+    test_socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+    udp_socket.start_socket()
+
+    # When
+
+    time.sleep(.1)
+    udp_socket.sendto(msg, (mcast_grp, mcast_port))
+    time.sleep(.1)
+    # rcv_msg = test_socket.recv(1024)
+    # print(test_socket.recvfrom(1024))
+
+    udp_socket.stop_socket()
+    test_socket.shutdown(socket.SHUT_RD)
+    test_socket.close()
+
+    # Then
+    # print(rcv_msg)
+
+# python -m pytest -s -vv
