@@ -108,13 +108,14 @@ class UDPMessage:
         return self.full_content + self.crc
 
     @staticmethod
-    def from_bytes(msg_bytes: bytes):
+    def from_bytes(msg_bytes: bytes, keep_if_corrupted: Optional[bool] = False):
         """Create a new message from bytes.
 
         This function create a new message from a given byte array. If the message is corrupted
         the function will return None.
 
         :param msg_bytes: The bytes to convert into a UDPMessage.
+        :param keep_if_corrupted: Return the message even if it is corrupted when set to True.
 
         :return msg: The message if it is not corrupted else None.
         """
@@ -134,7 +135,7 @@ class UDPMessage:
         msg.time_creation = time_creation
         msg.crc = crc
         msg.full_content = msg.msg_id + msg.time_creation + msg.topic + msg.message_nb + msg.payload
-        if msg.check_crc():
+        if msg.check_crc() or keep_if_corrupted:
             return msg
 
 

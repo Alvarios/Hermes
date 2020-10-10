@@ -29,7 +29,7 @@ def test_new_video_stream_correctly_setup_max_packet_size():
 
 def test_refresh_image_correctly_change_current_image():
     # Given
-    new_image = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2]])
+    new_image = np.array([[[0, 0, 0], [1, 1, 1], [2, 2, 2]], [[0, 0, 0], [1, 1, 1], [2, 2, 2]]])
     vs = VideoStream()
 
     # When
@@ -42,7 +42,7 @@ def test_refresh_image_correctly_change_current_image():
 def test_refresh_image_raise_an_error_if_shape_length_is_greater_than_3():
     # Given
     new_image = np.array(
-        [[[1, 1, 1], [1, 1, 1], [1, 1, 1]], [[1, 1, 1], [1, 1, 1], [1, 1, 1]], [[1, 1, 1], [1, 1, 1], [1, 1, 1]]])
+        [[[[1, 1, 1], [1, 1, 1], [1, 1, 1]], [[1, 1, 1], [1, 1, 1], [1, 1, 1]], [[1, 1, 1], [1, 1, 1], [1, 1, 1]]]])
     vs = VideoStream()
 
     # When
@@ -54,7 +54,7 @@ def test_refresh_image_raise_an_error_if_shape_length_is_greater_than_3():
 
 def test_refresh_image_raise_an_error_if_shape_length_is_2_and_pixels_does_not_contains_3_values():
     # Given
-    new_image = np.array([[0, 0], [1, 1], [2, 2]])
+    new_image = np.array([[[0, 0], [1, 1], [2, 2]]])
     vs = VideoStream()
 
     # When
@@ -94,17 +94,19 @@ def test_split_image_correctly_returns_a_list_of_bytes_with_many_elements_for_bi
 
 def test_get_header_msg_correctly_return_an_array_of_bytes_with_correct_metadata():
     # Given
-    new_image = np.array(4 * 4 * [[0, 0, 0]])
-    vs = VideoStream(max_packet_size=12)
-    vs.refresh_image(new_image)
-    split_img = vs.split_image()
-    expected_payload = len(split_img).to_bytes(VideoStream.NB_PACKET_SIZE, 'little') + len(
-        new_image.flatten()).to_bytes(VideoStream.TOTAL_BYTES_SIZE, 'little') + (3).to_bytes(
-        VideoStream.SIZE_PIXEL_SIZE, 'little')
+    nb_packet = 2
+    total_bytes = 50
+    height = 2
+    length = 25
+    pixel_size = 3
+
+    expected_payload = nb_packet.to_bytes(VideoStream.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
+        VideoStream.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(VideoStream.HEIGHT_SIZE, 'little') + length.to_bytes(
+        VideoStream.LENGTH_SIZE, 'little') + pixel_size.to_bytes(VideoStream.SIZE_PIXEL_SIZE, 'little')
     expected_topic = 10
 
     # When
-    result = vs.get_header_msg(expected_topic, len(split_img), len(new_image.flatten()), 3)
+    result = VideoStream.get_header_msg(expected_topic, nb_packet, total_bytes, height, length, pixel_size)
     result_message = UDPMessage.from_bytes(result)
 
     # Then
@@ -114,7 +116,7 @@ def test_get_header_msg_correctly_return_an_array_of_bytes_with_correct_metadata
 
 def test_get_pixel_size_correctly_return_3_for_pixel_size_3():
     # Given
-    new_image = np.array(4 * 4 * [[0, 0, 0]])
+    new_image = np.array(4 * [4 * 4 * [[0, 0, 0]]])
     vs = VideoStream()
     vs.refresh_image(new_image)
     expected_pixel_size = 3
@@ -128,7 +130,7 @@ def test_get_pixel_size_correctly_return_3_for_pixel_size_3():
 
 def test_get_pixel_size_correctly_return_1_for_pixel_size_1():
     # Given
-    new_image = np.array(4 * [0])
+    new_image = np.array(4 * [4 * [0]])
     vs = VideoStream()
     vs.refresh_image(new_image)
     expected_pixel_size = 1
@@ -142,17 +144,24 @@ def test_get_pixel_size_correctly_return_1_for_pixel_size_1():
 
 def test_get_messages_correctly_return_a_list_of_message_to_send_that_represent_the_current_image():
     # Given
-    new_image = np.array(4 * 4 * [[0, 0, 0]])
-    vs = VideoStream(max_packet_size=12)
+    new_image = np.array(4 * [4 * 4 * [[0, 0, 0]]])
+    print(new_image.shape)
+    vs = VideoStream(max_packet_size=64)
     vs.refresh_image(new_image)
+    nb_packet = 3
+    total_bytes = 192
+    height = 4
+    length = 16
+    pixel_size = 3
     expected_topic = 10
     split_img = vs.split_image()
-    expected_header = len(split_img).to_bytes(VideoStream.NB_PACKET_SIZE, 'little') + len(
-        new_image.flatten()).to_bytes(VideoStream.TOTAL_BYTES_SIZE, 'little') + (3).to_bytes(
-        VideoStream.SIZE_PIXEL_SIZE, 'little')
+    expected_header = nb_packet.to_bytes(VideoStream.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
+        VideoStream.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(VideoStream.HEIGHT_SIZE, 'little') + length.to_bytes(
+        VideoStream.LENGTH_SIZE, 'little') + pixel_size.to_bytes(VideoStream.SIZE_PIXEL_SIZE, 'little')
 
     # When
-    result = vs.get_messages(10)
+    result = vs.get_messages(expected_topic)
+    print(result)
 
     # Then
     assert len(result) == len(split_img) + 1
@@ -161,6 +170,5 @@ def test_get_messages_correctly_return_a_list_of_message_to_send_that_represent_
         msg = UDPMessage.from_bytes(result[i])
         assert int.from_bytes(msg.message_nb, 'little') == i
         assert int.from_bytes(msg.topic, 'little') == expected_topic
-        assert msg.payload == bytes(12 * [0])
-
-
+        assert msg.payload == bytes(64 * [0])
+    print(list(UDPMessage.from_bytes(result[0]).payload))

@@ -15,6 +15,8 @@ while rval:
     rval, frame = vc.read()
     key = cv2.waitKey(20)
     print(frame[0])
+    print(frame.shape)
+    print(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).shape)
     if key == 27: # exit on ESC
         break
 cv2.destroyWindow("preview")
