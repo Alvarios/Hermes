@@ -1,174 +1,159 @@
-from Stream.VideoStream import VideoStream
+import multiprocessing as mp
+from Stream.VideoStream import VideoStream, ImageManager, VideoTopic
+from Sockets.UDPSocket import UDPSocket
 import numpy as np
 import pytest
-import collections
-from Messages.UDPMessage import UDPMessage
+import time
 
 
-def test_new_video_stream_correctly_setup_an_empty_numpy_array_for_image():
+def test_video_stream_is_instance_of_process():
     # Given
-    expected_current_image_size = 0
+    expected_type = mp.Process
 
     # When
     vs = VideoStream()
 
     # Then
-    assert vs.current_image.size == 0
+    assert isinstance(vs, expected_type)
+    vs.stop()
+    vs.join()
 
 
-def test_new_video_stream_correctly_setup_max_packet_size():
+def test_video_stream_define_an_image_manager_with_correct_parameter():
     # Given
-    max_packet_size = 1000
+    expected_type = ImageManager
+    max_packet_size = 10000
 
     # When
     vs = VideoStream(max_packet_size=max_packet_size)
 
     # Then
-    assert vs.current_image.size == 0
+    assert isinstance(vs.im, expected_type)
+    assert vs.im.max_packet_size == max_packet_size
+    vs.stop()
+    vs.join()
 
 
-def test_refresh_image_correctly_change_current_image():
+def test_video_stream_define_an_empty_list_of_video_topic():
     # Given
-    new_image = np.array([[[0, 0, 0], [1, 1, 1], [2, 2, 2]], [[0, 0, 0], [1, 1, 1], [2, 2, 2]]])
-    vs = VideoStream()
+    expected_list = []
 
     # When
-    vs.refresh_image(new_image)
+    vs = VideoStream()
 
     # Then
-    assert np.array_equiv(vs.current_image, new_image)
+    assert vs.opened_topics == []
+    vs.stop()
+    vs.join()
 
 
-def test_refresh_image_raise_an_error_if_shape_length_is_greater_than_3():
+def test_refresh_image_correctly_refresh_image_in_im():
     # Given
-    new_image = np.array(
-        [[[[1, 1, 1], [1, 1, 1], [1, 1, 1]], [[1, 1, 1], [1, 1, 1], [1, 1, 1]], [[1, 1, 1], [1, 1, 1], [1, 1, 1]]]])
+    expected_img = np.array(
+        [[[0, 0, 0], [0, 0, 0], [0, 0, 0]], [[0, 0, 0], [0, 0, 0], [0, 0, 0]], [[0, 0, 0], [0, 0, 0], [0, 0, 0]]])
+
+    # When
     vs = VideoStream()
+    vs.refresh_image(expected_img)
+
+    # Then
+    assert np.array_equiv(vs.get_current_image(), expected_img)
+    vs.stop()
+    vs.join()
+
+
+def test_video_stream_is_created_with_correct_role():
+    # Given
+    role_1 = VideoStream.EMITTER
+    role_2 = VideoStream.CONSUMER
+
+    # When
+    vs1 = VideoStream(role=role_1)
+    vs2 = VideoStream(role=role_2)
+
+    # Then
+    assert vs1.role == role_1
+    assert vs2.role == role_2
+
+    vs1.stop()
+    vs1.join()
+    vs2.stop()
+    vs2.join()
+
+
+def test_video_stream_cannot_be_created_with_unexpected_role():
+    # Given
+    role = "test"
 
     # When
 
     # Then
     with pytest.raises(ValueError):
-        vs.refresh_image(new_image)
+        vs = VideoStream(role=role)
+        vs.stop()
+        vs.join()
 
 
-def test_refresh_image_raise_an_error_if_shape_length_is_2_and_pixels_does_not_contains_3_values():
+def test_video_stream_create_two_connection_pipe():
     # Given
-    new_image = np.array([[[0, 0], [1, 1], [2, 2]]])
+    expected_type = mp.connection.PipeConnection
+
+    # When
+    vs = VideoStream()
+
+    # Then
+    assert type(vs.external_pipe) == expected_type
+    assert type(vs.internal_pipe) == expected_type
+
+    vs.stop()
+    vs.join()
+
+
+def test_video_stream_can_be_started_and_stopped():
+    # Given
     vs = VideoStream()
 
     # When
+    while vs.get_is_running() is False:
+        pass
 
     # Then
-    with pytest.raises(ValueError):
-        vs.refresh_image(new_image)
+    assert vs.get_is_running()
+    vs.stop()
+    vs.join()
 
 
-def test_split_image_correctly_returns_a_list_of_bytes_with_one_element_for_small_image_of_pixels():
+def test_add_subscriber_correctly_add_a_subscriber():
     # Given
-    new_image = np.array([[0, 0, 0], [1, 1, 1], [2, 2, 2]])
-    expected_result = [bytes([0, 0, 0, 1, 1, 1, 2, 2, 2])]
-    vs = VideoStream(max_packet_size=100)
-    vs.refresh_image(new_image)
-
-    # When
-    result = vs.split_image()
-
-    # Then
-    assert collections.Counter(result) == collections.Counter(expected_result)
-
-
-def test_split_image_correctly_returns_a_list_of_bytes_with_many_elements_for_big_image_of_pixels():
-    # Given
-    new_image = np.array(4 * 4 * [[0, 0, 0]])
-    expected_result = 4 * [bytes(12 * [0])]
-    vs = VideoStream(max_packet_size=12)
-    vs.refresh_image(new_image)
-
-    # When
-    result = vs.split_image()
-
-    # Then
-    assert collections.Counter(result) == collections.Counter(expected_result)
-
-
-def test_get_header_msg_correctly_return_an_array_of_bytes_with_correct_metadata():
-    # Given
-    nb_packet = 2
-    total_bytes = 50
-    height = 2
-    length = 25
-    pixel_size = 3
-
-    expected_payload = nb_packet.to_bytes(VideoStream.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
-        VideoStream.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(VideoStream.HEIGHT_SIZE, 'little') + length.to_bytes(
-        VideoStream.LENGTH_SIZE, 'little') + pixel_size.to_bytes(VideoStream.SIZE_PIXEL_SIZE, 'little')
-    expected_topic = 10
-
-    # When
-    result = VideoStream.get_header_msg(expected_topic, nb_packet, total_bytes, height, length, pixel_size)
-    result_message = UDPMessage.from_bytes(result)
-
-    # Then
-    assert result_message.payload == expected_payload
-    assert int.from_bytes(result_message.topic, 'little') == expected_topic
-
-
-def test_get_pixel_size_correctly_return_3_for_pixel_size_3():
-    # Given
-    new_image = np.array(4 * [4 * 4 * [[0, 0, 0]]])
+    sub_address_port = ('127.0.01', 50000)
     vs = VideoStream()
-    vs.refresh_image(new_image)
-    expected_pixel_size = 3
+    while vs.get_is_running() is False:
+        pass
 
     # When
-    result = vs.get_pixel_size()
+    vs.add_subscriber(sub_address_port)
 
     # Then
-    assert result == expected_pixel_size
+    assert len(vs.get_subs_list()) == 1
+    assert vs.get_subs_list()[0] == sub_address_port
+
+    vs.stop()
+    vs.join()
 
 
-def test_get_pixel_size_correctly_return_1_for_pixel_size_1():
+def test_remove_subscriber_correctly_remove_a_subscriber():
     # Given
-    new_image = np.array(4 * [4 * [0]])
+    sub_address_port = ('127.0.01', 50000)
     vs = VideoStream()
-    vs.refresh_image(new_image)
-    expected_pixel_size = 1
+    while vs.get_is_running() is False:
+        pass
 
     # When
-    result = vs.get_pixel_size()
+    vs.add_subscriber(sub_address_port)
+    vs.remove_subscriber(0)
 
     # Then
-    assert result == expected_pixel_size
+    assert len(vs.get_subs_list()) == 0
 
-
-def test_get_messages_correctly_return_a_list_of_message_to_send_that_represent_the_current_image():
-    # Given
-    new_image = np.array(4 * [4 * 4 * [[0, 0, 0]]])
-    print(new_image.shape)
-    vs = VideoStream(max_packet_size=64)
-    vs.refresh_image(new_image)
-    nb_packet = 3
-    total_bytes = 192
-    height = 4
-    length = 16
-    pixel_size = 3
-    expected_topic = 10
-    split_img = vs.split_image()
-    expected_header = nb_packet.to_bytes(VideoStream.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
-        VideoStream.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(VideoStream.HEIGHT_SIZE, 'little') + length.to_bytes(
-        VideoStream.LENGTH_SIZE, 'little') + pixel_size.to_bytes(VideoStream.SIZE_PIXEL_SIZE, 'little')
-
-    # When
-    result = vs.get_messages(expected_topic)
-    print(result)
-
-    # Then
-    assert len(result) == len(split_img) + 1
-    assert collections.Counter(UDPMessage.from_bytes(result[0]).payload) == collections.Counter(list(expected_header))
-    for i in range(1, len(result)):
-        msg = UDPMessage.from_bytes(result[i])
-        assert int.from_bytes(msg.message_nb, 'little') == i
-        assert int.from_bytes(msg.topic, 'little') == expected_topic
-        assert msg.payload == bytes(64 * [0])
-    print(list(UDPMessage.from_bytes(result[0]).payload))
+    vs.stop()
+    vs.join()

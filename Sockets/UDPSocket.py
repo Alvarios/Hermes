@@ -53,9 +53,9 @@ class UDPSocket(Thread):
         self.socket: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         self.is_running: bool = False
         self.key: bytes = key if key is not None else Fernet.generate_key()
-        self.fernet_encoder = Fernet(self.key)
-        self.enable_multicast = enable_multicast
-        self.multicast_ttl = multicast_ttl
+        self.fernet_encoder: Fernet = Fernet(self.key)
+        self.enable_multicast: bool = enable_multicast
+        self.multicast_ttl: int = multicast_ttl
 
     def start_socket(self) -> NoReturn:
         """Start the socket and run the listening thread."""
@@ -105,6 +105,13 @@ class UDPSocket(Thread):
             self.socket.sendto(msg, address_port)
         except OSError:
             pass
+
+    def in_waiting(self):
+        """Return True the queue is not empty
+
+        :return in_waiting: A bool that tell if the queue is empty.
+        """
+        return len(self.queue) != 0
 
     def pull(self) -> Tuple[bytes, Any]:
         """Return the first message of the queue and remove it.

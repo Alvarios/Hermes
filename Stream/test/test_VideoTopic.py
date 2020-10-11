@@ -1,4 +1,4 @@
-from Stream.VideoStream import VideoStream, VideoTopic
+from Stream.VideoStream import ImageManager, VideoTopic
 from Messages.UDPMessage import UDPMessage
 from math import pow
 import pytest
@@ -31,7 +31,7 @@ def test_new_video_topic_is_created_with_correct_values_given_as_parameter():
 def test_nb_packet_cannot_be_less_than_one_and_cannot_exceed_max_size():
     # Given
     min_nb = 0
-    max_nb = pow(2, 8 * VideoStream.NB_PACKET_SIZE)
+    max_nb = pow(2, 8 * ImageManager.NB_PACKET_SIZE)
     total_bytes = 50
     height = 10
     length = 10
@@ -52,7 +52,7 @@ def test_nb_packet_cannot_be_less_than_one_and_cannot_exceed_max_size():
 def test_total_bytes_cannot_be_less_than_one_and_cannot_exceed_max_size():
     # Given
     min_nb = 0
-    max_nb = pow(2, 8 * VideoStream.TOTAL_BYTES_SIZE)
+    max_nb = pow(2, 8 * ImageManager.TOTAL_BYTES_SIZE)
     nb_packet = 5
     height = 10
     length = 10
@@ -73,7 +73,7 @@ def test_total_bytes_cannot_be_less_than_one_and_cannot_exceed_max_size():
 def test_pixel_size_cannot_be_less_than_one_and_cannot_exceed_max_size():
     # Given
     min_nb = 0
-    max_nb = pow(2, 8 * VideoStream.SIZE_PIXEL_SIZE)
+    max_nb = pow(2, 8 * ImageManager.SIZE_PIXEL_SIZE)
     nb_packet = 5
     total_bytes = 50
     time_creation = 1000
@@ -372,13 +372,13 @@ def test_from_message_correctly_create_a_new_video_topic():
     length = 3
     pixel_size = 3
 
-    expected_payload = nb_packet.to_bytes(VideoStream.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
-        VideoStream.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(VideoStream.HEIGHT_SIZE, 'little') + length.to_bytes(
-        VideoStream.LENGTH_SIZE, 'little') + pixel_size.to_bytes(VideoStream.SIZE_PIXEL_SIZE, 'little')
+    expected_payload = nb_packet.to_bytes(ImageManager.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
+        ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE, 'little') + length.to_bytes(
+        ImageManager.LENGTH_SIZE, 'little') + pixel_size.to_bytes(ImageManager.SIZE_PIXEL_SIZE, 'little')
     expected_topic = 10
 
     # When
-    header = VideoStream.get_header_msg(expected_topic, nb_packet, total_bytes, height, length, pixel_size)
+    header = ImageManager.get_header_msg(expected_topic, nb_packet, total_bytes, height, length, pixel_size)
     header_message = UDPMessage.from_bytes(header)
     result = VideoTopic.from_message(header_message)
 

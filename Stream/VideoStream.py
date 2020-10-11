@@ -7,13 +7,214 @@ to ensure messages are read in correct order.
 """
 
 import numpy as np
-from typing import Optional, NoReturn, List, Union
+from typing import Optional, NoReturn, List, Union, Tuple
 import math
 from Messages.UDPMessage import UDPMessage
+from Sockets.UDPSocket import UDPSocket
+import multiprocessing as mp
+import copy
 
 
-class VideoStream:
-    """A class to manage video streaming.
+class VideoStream(mp.Process):
+    """A class to manage video streams.
+
+    This class inherit from Process to run the VideoStream on a different CPU core than parent process.
+
+        Constants :
+            EMITTER : Value that tell the VideoStream will send video stream.
+            CONSUMER : Value that tell the VideoStream will receive video stream.
+
+        Attributes :
+            internal_pipe : Internal side of the pipe used for communication with the process.
+            external_pipe : External side of the pipe used for communication with the process.
+            im : The ImageManager used for video stream.
+            role : Tell if the VideoStream is emitter or consumer.
+            opened_topics : A list of VideoTopic waiting for completion.
+            udp_socket : The UDPSocket used for sending or receiving data.
+            socket_ip : The ip used to bind the socket.
+            socket_port : The port used to bind the socket.
+            encryption_in_transit : Define if the messages must be encrypted.
+            max_queue_size : The max size of message queue.
+            buffer_size : The max size of the received message buffer.
+            is_running : Tell if the process is running.
+            key : The encryption key used to encrypt message. If no value is provided it will generate a new one.
+            enable_multicast : Specify if the socket can use multicast.
+            multicast_ttl : The TTL used for multicast.
+            subs_list : A list of tuples containing ip address and port of subscribers.
+    """
+    EMITTER = "emitter"
+    CONSUMER = "consumer"
+
+    def __init__(self, role: Optional[str] = EMITTER, max_packet_size: Optional[int] = 5000,
+                 socket_ip: Optional[str] = "127.0.0.1",
+                 socket_port: Optional[int] = 50000, encryption_in_transit: Optional[bool] = False,
+                 max_queue_size: Optional[int] = 100, buffer_size: Optional[int] = 65543,
+                 key: Optional[Union[None, bytes]] = None, enable_multicast: Optional[bool] = False,
+                 multicast_ttl: Optional[int] = 2):
+        """Create a new VideoStream object with given parameter and run the process.
+
+        :param role: Tell if the VideoStream is emitter or consumer.
+        :param max_packet_size: The max size of a packet (in byte).
+        :param socket_ip: The ip used to bind the socket.
+        :param socket_port: The port used to bind the socket.
+        :param encryption_in_transit: Define if the messages must be encrypted.
+        :param max_queue_size: The max size of message queue.
+        :param buffer_size: The max size of the received message buffer.
+        :param key: The encryption key used to encrypt message. If no value is provided it will generate a new one.
+        :param enable_multicast: Specify if the socket can use multicast.
+        :param multicast_ttl: A list of tuples containing ip address and port of subscribers.
+        """
+        super().__init__(target=self.process)
+        self.internal_pipe, self.external_pipe = mp.Pipe()
+        if role != VideoStream.EMITTER and role != VideoStream.CONSUMER:
+            raise ValueError
+        self.role = role
+        self.im: ImageManager = ImageManager(max_packet_size)
+        self.opened_topics: List[VideoTopic] = []
+        self.udp_socket: Union[UDPSocket, None] = None
+        self.socket_ip = socket_ip
+        self.socket_port = socket_port
+        self.encryption_in_transit: bool = encryption_in_transit
+        self.max_queue_size: int = max_queue_size
+        self.buffer_size: int = buffer_size
+        self.is_running: bool = False
+        self.enable_multicast: bool = enable_multicast
+        self.multicast_ttl: int = multicast_ttl
+        self.key: bytes = key
+        self.subs_list: List[Tuple[str, int]] = []
+        self.start()
+
+    def _refresh_image(self, new_image: np.array) -> NoReturn:
+        """Change the value of current image by the value of new_image.
+
+        :param new_image: The new image to send.
+        """
+        self.im.refresh_image(new_image)
+
+    def refresh_image(self, new_image: np.array) -> NoReturn:
+        """External call to _refresh_image.
+
+        :param new_image: The new image to send.
+        """
+        self.external_pipe.send((VideoStream._refresh_image, {"new_image": new_image}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    def _get_current_image(self) -> np.array:
+        """Return the current value of current image.
+
+        :return current_image: The current value of current image.
+        """
+        return self.im.current_image
+
+    def get_current_image(self) -> np.array:
+        """External call to _get_current_image
+
+        :return current_image: The current value of current image.
+        """
+        self.external_pipe.send((VideoStream._get_current_image, {}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    def process(self) -> NoReturn:
+        """The main process of the VideoStream."""
+        self.setup()
+        self.loop()
+
+    def setup(self) -> NoReturn:
+        """Initialization of the process."""
+        self.is_running = True
+        self.udp_socket = UDPSocket(socket_ip=self.socket_ip, socket_port=self.socket_port,
+                                    encryption_in_transit=self.encryption_in_transit,
+                                    max_queue_size=self.max_queue_size,
+                                    buffer_size=self.buffer_size, key=self.key, enable_multicast=self.enable_multicast,
+                                    multicast_ttl=self.multicast_ttl)
+        self.udp_socket.start()
+
+    def loop(self) -> NoReturn:
+        """The main loop of the process."""
+        max_topic = 2 ** (8 * UDPMessage.TOPIC_LENGTH)
+        img_topic = 0
+        while self.is_running:
+            # Manage external call of class method.
+            if self.internal_pipe.poll():
+                command = self.internal_pipe.recv()
+                if type(command) is tuple:
+                    self.internal_pipe.send(command[0](self, **command[1]))
+            # Send image packets if the VideoStream object is emitter.
+            if self.role == VideoStream.EMITTER:
+                self.cast(img_topic)
+                img_topic = (img_topic + 1) % max_topic
+
+    def _stop(self) -> NoReturn:
+        """Stop the process and its UDPSocket."""
+        self.is_running = False
+        self.udp_socket.stop_socket()
+
+    def stop(self) -> NoReturn:
+        """External call to _stop"""
+        self.external_pipe.send((VideoStream._stop, {}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    def _get_is_running(self) -> bool:
+        """Return True if the process is currently running.
+
+        :return is_running: A bool that tell if the process is currently running.
+        """
+        return self.is_running
+
+    def get_is_running(self):
+        """External call to _get_is_running.
+
+        :return is_running: A bool that tell if the process is currently running.
+        """
+        self.external_pipe.send((VideoStream._get_is_running, {}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    def _add_subscriber(self, address_port):
+        self.subs_list.append(address_port)
+
+    def add_subscriber(self, address_port):
+        self.external_pipe.send((VideoStream._add_subscriber, {"address_port": address_port}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    def _get_subs_list(self):
+        return self.subs_list
+
+    def get_subs_list(self):
+        self.external_pipe.send((VideoStream._get_subs_list, {}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    def _remove_subscriber(self, index: int):
+        self.subs_list.pop(index)
+
+    def remove_subscriber(self, index: int):
+        self.external_pipe.send((VideoStream._remove_subscriber, {"index": index}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    def cast(self, topic: int):
+        if np.array_equiv(self.im.current_image, np.array([])):
+            return
+        for sub in self.subs_list:
+            for msg_to_send in self.im.get_messages(topic):
+                # print("Send ", msg_to_send, ' to ', sub)
+                self.udp_socket.sendto(msg_to_send, sub)
+
+
+class ImageManager:
+    """A class to manage image to send.
 
         Constants :
             NB_PACKET_SIZE : The number of bytes to store the number of packet.
@@ -38,7 +239,7 @@ class VideoStream:
     NB_MSG_HEADER = 0
 
     def __init__(self, max_packet_size: Optional[int] = 5000) -> None:
-        """Create a new VideoStream with given parameters.
+        """Create a new ImageManager with given parameters.
 
         :param max_packet_size: The max size of a packet (in byte).
         """
@@ -60,7 +261,7 @@ class VideoStream:
 
         :return list_split_img: A list of bytes representing the current_image.
         """
-        flat_img = self.current_image.flatten()
+        flat_img = self.current_image.flatten().astype(np.uint8)
         return [bytes(flat_img[i * self.max_packet_size: self.max_packet_size + i * self.max_packet_size]) for i in
                 range(math.ceil(np.array(self.current_image.shape).prod() / self.max_packet_size))]
 
@@ -77,12 +278,12 @@ class VideoStream:
         :param pixel_size: The size of a pixel.
         :return header_msg: The UDPMessage containing image metadata.
         """
-        return UDPMessage(msg_id=VideoStream.VIDEO_PACKET_ID, topic=topic, message_nb=VideoStream.NB_MSG_HEADER,
-                          payload=nb_packet.to_bytes(VideoStream.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
-                              VideoStream.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(VideoStream.HEIGHT_SIZE,
-                                                                                        'little') + length.to_bytes(
-                              VideoStream.LENGTH_SIZE, 'little') + pixel_size.to_bytes(
-                              VideoStream.SIZE_PIXEL_SIZE, 'little')).to_bytes()
+        return UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, topic=topic, message_nb=ImageManager.NB_MSG_HEADER,
+                          payload=nb_packet.to_bytes(ImageManager.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
+                              ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE,
+                                                                                         'little') + length.to_bytes(
+                              ImageManager.LENGTH_SIZE, 'little') + pixel_size.to_bytes(
+                              ImageManager.SIZE_PIXEL_SIZE, 'little')).to_bytes()
 
     def get_pixel_size(self) -> int:
         """Return the size of a pixel.
@@ -99,14 +300,13 @@ class VideoStream:
         """
         img_split = self.split_image()
         img_messages = [
-            UDPMessage(msg_id=VideoStream.VIDEO_PACKET_ID, payload=e, topic=topic, message_nb=i + 1).to_bytes() for i, e
+            UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=e, topic=topic, message_nb=i + 1).to_bytes() for
+            i, e
             in enumerate(img_split)]
-        header = VideoStream.get_header_msg(topic, len(img_split), int(np.array(self.current_image.shape).prod()),
-                                            self.current_image.shape[0], self.current_image.shape[1],
-                                            self.get_pixel_size())
-        to_return = [header] + img_messages
-        # to_return = [header]
-        return to_return
+        header = ImageManager.get_header_msg(topic, len(img_split), int(np.array(self.current_image.shape).prod()),
+                                             self.current_image.shape[0], self.current_image.shape[1],
+                                             self.get_pixel_size())
+        return [header] + img_messages
 
 
 class VideoTopic:
@@ -151,7 +351,7 @@ class VideoTopic:
 
     @nb_packet.setter
     def nb_packet(self, value: int) -> NoReturn:
-        if value < 1 or value >= pow(2, 8 * VideoStream.NB_PACKET_SIZE):
+        if value < 1 or value >= pow(2, 8 * ImageManager.NB_PACKET_SIZE):
             raise ValueError
         self._nb_packet = value
 
@@ -161,7 +361,7 @@ class VideoTopic:
 
     @total_bytes.setter
     def total_bytes(self, value: int) -> NoReturn:
-        if value < 1 or value >= pow(2, 8 * VideoStream.TOTAL_BYTES_SIZE):
+        if value < 1 or value >= pow(2, 8 * ImageManager.TOTAL_BYTES_SIZE):
             raise ValueError
         self._total_bytes = value
 
@@ -171,7 +371,7 @@ class VideoTopic:
 
     @pixel_size.setter
     def pixel_size(self, value: int) -> NoReturn:
-        if value < 1 or value >= pow(2, 8 * VideoStream.SIZE_PIXEL_SIZE):
+        if value < 1 or value >= pow(2, 8 * ImageManager.SIZE_PIXEL_SIZE):
             raise ValueError
         self._pixel_size = value
 
@@ -193,7 +393,8 @@ class VideoTopic:
         :param new_message: The message to add to the topic.
         """
         self.count_rcv_msg += 1
-        if int.from_bytes(new_message.message_nb, 'little') > self.nb_packet or int.from_bytes(new_message.message_nb,                                                                                               'little') <= 0:
+        if int.from_bytes(new_message.message_nb, 'little') > self.nb_packet or int.from_bytes(new_message.message_nb,
+                                                                                               'little') <= 0:
             self.rcv_error = True
             return
         self.rcv_messages[int.from_bytes(new_message.message_nb, 'little') - 1] = new_message
@@ -240,15 +441,15 @@ class VideoTopic:
         """
         payload = new_msg.payload
         cursor_pos = 0
-        nb_packet = int.from_bytes(payload[cursor_pos:cursor_pos + VideoStream.NB_PACKET_SIZE], 'little')
-        cursor_pos += VideoStream.NB_PACKET_SIZE
-        total_bytes = int.from_bytes(payload[cursor_pos:cursor_pos + VideoStream.TOTAL_BYTES_SIZE], 'little')
-        cursor_pos += VideoStream.TOTAL_BYTES_SIZE
-        height = int.from_bytes(payload[cursor_pos:cursor_pos + VideoStream.HEIGHT_SIZE], 'little')
-        cursor_pos += VideoStream.HEIGHT_SIZE
-        length = int.from_bytes(payload[cursor_pos:cursor_pos + VideoStream.LENGTH_SIZE], 'little')
-        cursor_pos += VideoStream.LENGTH_SIZE
-        pixel_size = int.from_bytes(payload[cursor_pos:cursor_pos + VideoStream.SIZE_PIXEL_SIZE], 'little')
+        nb_packet = int.from_bytes(payload[cursor_pos:cursor_pos + ImageManager.NB_PACKET_SIZE], 'little')
+        cursor_pos += ImageManager.NB_PACKET_SIZE
+        total_bytes = int.from_bytes(payload[cursor_pos:cursor_pos + ImageManager.TOTAL_BYTES_SIZE], 'little')
+        cursor_pos += ImageManager.TOTAL_BYTES_SIZE
+        height = int.from_bytes(payload[cursor_pos:cursor_pos + ImageManager.HEIGHT_SIZE], 'little')
+        cursor_pos += ImageManager.HEIGHT_SIZE
+        length = int.from_bytes(payload[cursor_pos:cursor_pos + ImageManager.LENGTH_SIZE], 'little')
+        cursor_pos += ImageManager.LENGTH_SIZE
+        pixel_size = int.from_bytes(payload[cursor_pos:cursor_pos + ImageManager.SIZE_PIXEL_SIZE], 'little')
         time_creation = int.from_bytes(new_msg.time_creation, 'little')
         return VideoTopic(nb_packet, total_bytes, height, length, pixel_size, time_creation)
 
@@ -256,9 +457,12 @@ class VideoTopic:
 if __name__ == "__main__":
     import cv2
 
-    # vs = VideoStream(max_packet_size=UDPMessage.PAYLOAD_MAX_SIZE)
-    vs = VideoStream(max_packet_size=UDPMessage.PAYLOAD_MAX_SIZE)
-    cv2.namedWindow("preview")
+    test_socket = UDPSocket(socket_ip="127.0.0.1", socket_port=50001, max_queue_size=1000)
+    test_socket.start_socket()
+    test_socket.sendto("hello".encode("ascii"), ("127.0.0.1", 50001))
+    vs = VideoStream(max_packet_size=50000, socket_ip="127.0.0.1", socket_port=50000)
+    vs.add_subscriber(("127.0.0.1", 50001))
+    # cv2.namedWindow("preview")
     vc = cv2.VideoCapture(0)
 
     if vc.isOpened():  # try to get the first frame
@@ -269,20 +473,12 @@ if __name__ == "__main__":
     while rval:
         rval, frame = vc.read()
         vs.refresh_image(frame)
-        # print(vs.current_image.shape)
-        # print(np.array(vs.current_image.shape).prod())
-        msg = vs.get_messages(10)
-        tmp = np.array([len(list(UDPMessage.from_bytes(i).payload)) for i in msg[1:]]).sum()
-
-        topic = VideoTopic.from_message(UDPMessage.from_bytes(msg[0]))
-
-        for i in msg[1:]:
-            topic.add_message(UDPMessage.from_bytes(i))
-        test_frame: np.array = topic.rebuild_img()
+        if test_socket.in_waiting():
+            print(test_socket.pull())
 
         # cv2.imshow("preview", frame)
-        cv2.imshow("preview", test_frame)
+        # cv2.imshow("preview", test_frame)
         key = cv2.waitKey(20)
         if key == 27:  # exit on ESC
             break
-    cv2.destroyWindow("preview")
+    # cv2.destroyWindow("preview")
