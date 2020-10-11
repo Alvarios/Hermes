@@ -7,7 +7,7 @@ to ensure messages are read in correct order.
 """
 
 import numpy as np
-from typing import Optional, NoReturn, List, Union, Tuple
+from typing import Optional, NoReturn, List, Union, Tuple, Dict
 import math
 from Messages.UDPMessage import UDPMessage
 from Sockets.UDPSocket import UDPSocket
@@ -452,6 +452,28 @@ class VideoTopic:
         pixel_size = int.from_bytes(payload[cursor_pos:cursor_pos + ImageManager.SIZE_PIXEL_SIZE], 'little')
         time_creation = int.from_bytes(new_msg.time_creation, 'little')
         return VideoTopic(nb_packet, total_bytes, height, length, pixel_size, time_creation)
+
+
+class TopicManager:
+    """A class designed to manage the incoming messages in order to rebuild images.
+
+        Attributes :
+            open_topic : A dictionary of VideoTopic representing current open topic.
+            img_queue : A list of images waiting to be pulled.
+
+    """
+
+    def __init__(self) -> None:
+        self.open_topic: Dict[int, VideoTopic] = {}
+        self.img_queue: List[np.array] = []
+
+    def in_waiting(self) -> bool:
+        return len(self.img_queue) > 0
+
+    def add_message(self, new_message: UDPMessage):
+        topic = int.from_bytes(new_message.topic, 'little')
+        if int.from_bytes(new_message.message_nb, 'little') == 0 and (topic not in self.open_topic.keys()):
+            self.open_topic[topic] = VideoTopic.from_message(new_message)
 
 
 if __name__ == "__main__":

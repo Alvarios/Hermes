@@ -1,6 +1,5 @@
 import multiprocessing as mp
 from Stream.VideoStream import VideoStream, ImageManager, VideoTopic
-from Sockets.UDPSocket import UDPSocket
 import numpy as np
 import pytest
 import time
