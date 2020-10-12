@@ -9,6 +9,7 @@ Press ESC to quit the example while running.
 
 from Stream.VideoStream import VideoStream
 import cv2
+import datetime
 
 if __name__ == "__main__":
     emitter_ip = input("Ip address of emitter : \n")
@@ -30,14 +31,20 @@ if __name__ == "__main__":
         rcv_frame = consumer.get_rcv_img()
     last_frame = rcv_frame
 
+    start = datetime.datetime.now()
+    cpt = 0
     while True:
         rcv_frame = consumer.get_rcv_img()
         if rcv_frame is not None:
             last_frame = rcv_frame
+            cpt += 1
         cv2.imshow("preview", last_frame)
 
         key = cv2.waitKey(20)
         if key == 27:  # exit on ESC
             break
+    stop = datetime.datetime.now()
+    dt = stop - start
+    print("Average IPS : ", cpt / dt.total_seconds())
     cv2.destroyWindow("preview")
     consumer.stop()
