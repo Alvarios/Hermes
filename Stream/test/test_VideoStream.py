@@ -5,6 +5,7 @@ import pytest
 import time
 
 
+
 def test_video_stream_is_instance_of_process():
     # Given
     expected_type = mp.Process
@@ -156,3 +157,51 @@ def test_remove_subscriber_correctly_remove_a_subscriber():
 
     vs.stop()
     vs.join()
+def test_get_rcv_img_return_none_if_rcv_img_buffer_is_empty():
+    # Given
+    sub_address_port = ('127.0.01', 50000)
+    vs = VideoStream(role=VideoStream.CONSUMER)
+    while vs.get_is_running() is False:
+        pass
+
+    # When
+    result = vs.get_rcv_img()
+
+    # Then
+
+    assert result is None
+
+    vs.stop()
+    vs.join()
+
+
+def test_two_video_stream_can_transmit_images():
+    # Given
+    expected_img = np.array(4 * [4 * 4 * [[0, 0, 0]]])
+    emitter_address_port = ('127.0.0.1', 50000)
+    consumer_address_port = ('127.0.0.1', 50001)
+    emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
+                          socket_port=emitter_address_port[1])
+    consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
+                           socket_port=consumer_address_port[1], use_rcv_img_buffer=False,
+                           buffer_size=100000)
+    while emitter.get_is_running() is False:
+        pass
+    while consumer.get_is_running() is False:
+        pass
+    emitter.refresh_image(expected_img)
+    emitter.add_subscriber(consumer_address_port)
+    time.sleep(.001)
+
+    # When
+    result = consumer.get_rcv_img()
+
+    # Then
+    assert np.array_equiv(result, expected_img)
+
+    emitter.stop()
+    emitter.join()
+    consumer.stop()
+    consumer.join()
+
+# python -m pytest -s -vv Stream/test/test_VideoStream.py

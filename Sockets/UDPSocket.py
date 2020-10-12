@@ -20,6 +20,7 @@ class UDPSocket(Thread):
             encryption_in_transit : Define if the messages must be encrypted.
             max_queue_size : The max size of message queue.
             buffer_size : The max size of the received message buffer.
+            queue : The queue that stores received messages.
             socket : The socket object used for udp communication.
             is_running : A flag that specify if the socket is currently running.
             key : The encryption key used to encrypt message. If no value is provided it will generate a new one.

@@ -389,3 +389,5 @@ def test_from_message_correctly_create_a_new_video_topic():
     assert result.length == length
     assert result.pixel_size == pixel_size
     assert result.time_creation == int.from_bytes(header_message.time_creation, 'little')
+
+

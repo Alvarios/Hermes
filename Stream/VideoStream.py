@@ -12,7 +12,7 @@ import math
 from Messages.UDPMessage import UDPMessage
 from Sockets.UDPSocket import UDPSocket
 import multiprocessing as mp
-import copy
+import time
 
 
 class VideoStream(mp.Process):
@@ -41,16 +41,18 @@ class VideoStream(mp.Process):
             enable_multicast : Specify if the socket can use multicast.
             multicast_ttl : The TTL used for multicast.
             subs_list : A list of tuples containing ip address and port of subscribers.
+            use_rcv_img_buffer : A bool that tell if received image are stored in a buffer or in a single variable.
+            rcv_img_buffer : A buffer to store incoming image.
     """
     EMITTER = "emitter"
     CONSUMER = "consumer"
 
-    def __init__(self, role: Optional[str] = EMITTER, max_packet_size: Optional[int] = 5000,
+    def __init__(self, role: Optional[str] = EMITTER, max_packet_size: Optional[int] = 60000,
                  socket_ip: Optional[str] = "127.0.0.1",
                  socket_port: Optional[int] = 50000, encryption_in_transit: Optional[bool] = False,
                  max_queue_size: Optional[int] = 100, buffer_size: Optional[int] = 65543,
                  key: Optional[Union[None, bytes]] = None, enable_multicast: Optional[bool] = False,
-                 multicast_ttl: Optional[int] = 2):
+                 multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False):
         """Create a new VideoStream object with given parameter and run the process.
 
         :param role: Tell if the VideoStream is emitter or consumer.
@@ -63,6 +65,7 @@ class VideoStream(mp.Process):
         :param key: The encryption key used to encrypt message. If no value is provided it will generate a new one.
         :param enable_multicast: Specify if the socket can use multicast.
         :param multicast_ttl: A list of tuples containing ip address and port of subscribers.
+        :param use_rcv_img_buffer: A bool that tell if received image are stored in a buffer or in a single variable.
         """
         super().__init__(target=self.process)
         self.internal_pipe, self.external_pipe = mp.Pipe()
@@ -82,6 +85,11 @@ class VideoStream(mp.Process):
         self.multicast_ttl: int = multicast_ttl
         self.key: bytes = key
         self.subs_list: List[Tuple[str, int]] = []
+        self.tm = TopicManager()
+        self.use_rcv_img_buffer = use_rcv_img_buffer
+        self.rcv_img_buffer: List[np.array] = []
+        if use_rcv_img_buffer is False:
+            self.rcv_img_buffer.append(None)
         self.start()
 
     def _refresh_image(self, new_image: np.array) -> NoReturn:
@@ -131,7 +139,7 @@ class VideoStream(mp.Process):
                                     max_queue_size=self.max_queue_size,
                                     buffer_size=self.buffer_size, key=self.key, enable_multicast=self.enable_multicast,
                                     multicast_ttl=self.multicast_ttl)
-        self.udp_socket.start()
+        self.udp_socket.start_socket()
 
     def loop(self) -> NoReturn:
         """The main loop of the process."""
@@ -147,6 +155,18 @@ class VideoStream(mp.Process):
             if self.role == VideoStream.EMITTER:
                 self.cast(img_topic)
                 img_topic = (img_topic + 1) % max_topic
+                VideoStream.delay(60000)
+
+            # Receive packets if the VideoStream object is consumer.
+            if self.role == VideoStream.CONSUMER:
+                while self.udp_socket.in_waiting():
+                    msg = UDPMessage.from_bytes(self.udp_socket.pull()[0])
+                    self.tm.add_message(msg)
+                if self.tm.in_waiting():
+                    if self.use_rcv_img_buffer:
+                        self.rcv_img_buffer.append(self.tm.pull())
+                    else:
+                        self.rcv_img_buffer[0] = self.tm.pull()
 
     def _stop(self) -> NoReturn:
         """Stop the process and its UDPSocket."""
@@ -207,10 +227,28 @@ class VideoStream(mp.Process):
     def cast(self, topic: int):
         if np.array_equiv(self.im.current_image, np.array([])):
             return
-        for sub in self.subs_list:
-            for msg_to_send in self.im.get_messages(topic):
-                # print("Send ", msg_to_send, ' to ', sub)
+        for msg_to_send in self.im.get_messages(topic):
+            for sub in self.subs_list:
                 self.udp_socket.sendto(msg_to_send, sub)
+            VideoStream.delay(len(msg_to_send))
+
+    def _get_rcv_img(self):
+        if len(self.rcv_img_buffer) == 0:
+            return None
+        if self.use_rcv_img_buffer is False:
+            return self.rcv_img_buffer[0]
+        return self.rcv_img_buffer.pop(0)
+
+    def get_rcv_img(self):
+        self.external_pipe.send((VideoStream._get_rcv_img, {}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    @staticmethod
+    def delay(cycle: int):
+        for i in range(cycle):
+            pass
 
 
 class ImageManager:
@@ -423,7 +461,8 @@ class VideoTopic:
 
         :return image: The image encoded in the received messages. None if an error is detected.
         """
-        if self.total_bytes % self.pixel_size != 0 or self.total_bytes % self.height != 0 or self.total_bytes % self.length != 0:
+        if self.total_bytes % self.pixel_size != 0 or self.total_bytes % self.height != 0 \
+                or self.total_bytes % self.length != 0:
             return None
         if self.pixel_size != 1:
             return np.concatenate([list(i.payload) for i in self.rcv_messages]).reshape((self.height, self.length,
@@ -556,12 +595,20 @@ class TopicManager:
 if __name__ == "__main__":
     import cv2
 
-    test_socket = UDPSocket(socket_ip="127.0.0.1", socket_port=50001, max_queue_size=1000)
-    test_socket.start_socket()
-    test_socket.sendto("hello".encode("ascii"), ("127.0.0.1", 50001))
-    vs = VideoStream(max_packet_size=50000, socket_ip="127.0.0.1", socket_port=50000)
-    vs.add_subscriber(("127.0.0.1", 50001))
-    # cv2.namedWindow("preview")
+    expected_img = np.array(4 * [4 * 4 * [[0, 0, 0]]])
+    emitter_address_port = ('192.168.50.150', 50000)
+    consumer_address_port = ('192.168.50.150', 50001)
+    emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
+                          socket_port=emitter_address_port[1])
+    consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
+                           socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000)
+    while emitter.get_is_running() is False:
+        pass
+    while consumer.get_is_running() is False:
+        pass
+    emitter.add_subscriber(consumer_address_port)
+
+    cv2.namedWindow("preview")
     vc = cv2.VideoCapture(0)
 
     if vc.isOpened():  # try to get the first frame
@@ -569,15 +616,21 @@ if __name__ == "__main__":
     else:
         rval = False
 
+    last_frame = frame
+
     while rval:
         rval, frame = vc.read()
-        vs.refresh_image(frame)
-        if test_socket.in_waiting():
-            print(test_socket.pull())
-
+        emitter.refresh_image(frame)
+        rcv_frame = consumer.get_rcv_img()
+        # print(rcv_frame)
+        if rcv_frame is not None:
+            last_frame = rcv_frame
+        cv2.imshow("preview", last_frame)
         # cv2.imshow("preview", frame)
         # cv2.imshow("preview", test_frame)
         key = cv2.waitKey(20)
         if key == 27:  # exit on ESC
             break
-    # cv2.destroyWindow("preview")
+    cv2.destroyWindow("preview")
+    emitter.stop()
+    consumer.stop()
