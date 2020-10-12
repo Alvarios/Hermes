@@ -1,9 +1,8 @@
 import multiprocessing as mp
-from Stream.VideoStream import VideoStream, ImageManager, VideoTopic
+from Stream.VideoStream import VideoStream, ImageManager
 import numpy as np
 import pytest
 import time
-
 
 
 def test_video_stream_is_instance_of_process():
@@ -68,7 +67,7 @@ def test_video_stream_is_created_with_correct_role():
     role_2 = VideoStream.CONSUMER
 
     # When
-    vs1 = VideoStream(role=role_1)
+    vs1 = VideoStream(role=role_1, socket_port=50001)
     vs2 = VideoStream(role=role_2)
 
     # Then
@@ -157,6 +156,8 @@ def test_remove_subscriber_correctly_remove_a_subscriber():
 
     vs.stop()
     vs.join()
+
+
 def test_get_rcv_img_return_none_if_rcv_img_buffer_is_empty():
     # Given
     sub_address_port = ('127.0.01', 50000)

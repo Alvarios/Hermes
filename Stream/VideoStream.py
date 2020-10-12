@@ -328,7 +328,7 @@ class ImageManager:
         if len(new_image.shape) > 3 or len(new_image.shape) < 2 or (
                 len(new_image.shape) == 3 and new_image.shape[2] != 3):
             raise ValueError
-        self.current_image = new_image
+        self.current_image = new_image.astype(np.uint8)
 
     def split_image(self) -> List[bytes]:
         """Split current_image into bytes with a maximal length of max_packet_size.
@@ -501,11 +501,14 @@ class VideoTopic:
                 or self.total_bytes % self.length != 0:
             return None
         if self.pixel_size != 1:
-            return np.concatenate([list(i.payload) for i in self.rcv_messages]).reshape((self.height, self.length,
-                                                                                         self.pixel_size)).astype(
-                np.uint8)
-        return np.concatenate([list(i.payload) for i in self.rcv_messages]).reshape((self.height, self.length)).astype(
-            np.uint8)
+            return np.concatenate([np.frombuffer(i.payload, np.uint8) for i in self.rcv_messages]).reshape(
+                (self.height, self.length, self.pixel_size)).astype(np.uint8)
+            # return np.concatenate([list(i.payload) for i in self.rcv_messages]).reshape((self.height, self.length,
+            #                                                                              self.pixel_size)).astype(
+            #     np.uint8)
+        return np.concatenate([np.frombuffer(i.payload, np.uint8) for i in self.rcv_messages]).reshape(
+            (self.height, self.length)).astype(np.uint8)
+        # python -m pytest -s -vv
 
     @staticmethod
     def from_message(new_msg: UDPMessage):
