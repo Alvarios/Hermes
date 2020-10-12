@@ -12,7 +12,6 @@ import math
 from Messages.UDPMessage import UDPMessage
 from Sockets.UDPSocket import UDPSocket
 import multiprocessing as mp
-import time
 
 
 class VideoStream(mp.Process):
@@ -197,42 +196,74 @@ class VideoStream(mp.Process):
             pass
         return self.external_pipe.recv()
 
-    def _add_subscriber(self, address_port):
+    def _add_subscriber(self, address_port) -> NoReturn:
+        """Add a subscriber in the list of subscriber.
+
+        :param address_port: A tuple containing the ip address and the port of the new subscriber.
+        """
         self.subs_list.append(address_port)
 
-    def add_subscriber(self, address_port):
+    def add_subscriber(self, address_port) -> NoReturn:
+        """External call to _add_subscriber.
+
+        :param address_port: A tuple containing the ip address and the port of the new subscriber.
+        """
         self.external_pipe.send((VideoStream._add_subscriber, {"address_port": address_port}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
 
-    def _get_subs_list(self):
+    def _get_subs_list(self) -> List[Tuple]:
+        """Return the list of subscribers.
+
+        :return subs_list: The list of subscribers.
+        """
         return self.subs_list
 
-    def get_subs_list(self):
+    def get_subs_list(self) -> List[Tuple]:
+        """External call to _get_subs_list.
+
+        :return subs_list: The list of subscribers.
+        """
         self.external_pipe.send((VideoStream._get_subs_list, {}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
 
-    def _remove_subscriber(self, index: int):
+    def _remove_subscriber(self, index: int) -> NoReturn:
+        """Remove a subscriber from the list of subscriber.
+
+        :param index: The index of the subscriber to remove.
+        """
         self.subs_list.pop(index)
 
-    def remove_subscriber(self, index: int):
+    def remove_subscriber(self, index: int) -> NoReturn:
+        """External call to _remove_subscriber.
+
+        :param index: The index of the subscriber to remove.
+        """
         self.external_pipe.send((VideoStream._remove_subscriber, {"index": index}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
 
-    def cast(self, topic: int):
-        if np.array_equiv(self.im.current_image, np.array([])):
+    def cast(self, topic: int) -> NoReturn:
+        """Send the current image using given topic number.
+
+        :param topic: The number of the topic used to send the image.
+        """
+        if np.array_equiv(self.im.current_image, np.array([])) or len(self.subs_list) == 0:
             return
         for msg_to_send in self.im.get_messages(topic):
             for sub in self.subs_list:
                 self.udp_socket.sendto(msg_to_send, sub)
-            VideoStream.delay(len(msg_to_send))
+            VideoStream.delay(len(msg_to_send) // len(self.subs_list))
 
-    def _get_rcv_img(self):
+    def _get_rcv_img(self) -> np.array:
+        """Return the received image.
+
+        :return rcv_img: The received image.
+        """
         if len(self.rcv_img_buffer) == 0:
             return None
         if self.use_rcv_img_buffer is False:
@@ -240,13 +271,18 @@ class VideoStream(mp.Process):
         return self.rcv_img_buffer.pop(0)
 
     def get_rcv_img(self):
+        """External call to _get_rcv_img.
+
+        :return rcv_img: The received image.
+        """
         self.external_pipe.send((VideoStream._get_rcv_img, {}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
 
     @staticmethod
-    def delay(cycle: int):
+    def delay(cycle: int) -> NoReturn:
+        """Do a delay of given cycle."""
         for i in range(cycle):
             pass
 
@@ -590,47 +626,3 @@ class TopicManager:
         """
         if self.in_waiting():
             return self.img_queue.pop(0)
-
-
-if __name__ == "__main__":
-    import cv2
-
-    expected_img = np.array(4 * [4 * 4 * [[0, 0, 0]]])
-    emitter_address_port = ('192.168.50.150', 50000)
-    consumer_address_port = ('192.168.50.150', 50001)
-    emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
-                          socket_port=emitter_address_port[1])
-    consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
-                           socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000)
-    while emitter.get_is_running() is False:
-        pass
-    while consumer.get_is_running() is False:
-        pass
-    emitter.add_subscriber(consumer_address_port)
-
-    cv2.namedWindow("preview")
-    vc = cv2.VideoCapture(0)
-
-    if vc.isOpened():  # try to get the first frame
-        rval, frame = vc.read()
-    else:
-        rval = False
-
-    last_frame = frame
-
-    while rval:
-        rval, frame = vc.read()
-        emitter.refresh_image(frame)
-        rcv_frame = consumer.get_rcv_img()
-        # print(rcv_frame)
-        if rcv_frame is not None:
-            last_frame = rcv_frame
-        cv2.imshow("preview", last_frame)
-        # cv2.imshow("preview", frame)
-        # cv2.imshow("preview", test_frame)
-        key = cv2.waitKey(20)
-        if key == 27:  # exit on ESC
-            break
-    cv2.destroyWindow("preview")
-    emitter.stop()
-    consumer.stop()
