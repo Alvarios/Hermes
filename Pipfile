@@ -13,6 +13,7 @@ pytest = "*"
 raw-zlib = "*"
 numpy = "*"
 opencv-python = "*"
+setuptools = "*"
 
 [requires]
 python_version = "3.9"
