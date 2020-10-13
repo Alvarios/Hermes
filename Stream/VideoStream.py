@@ -12,6 +12,7 @@ import math
 from Messages.UDPMessage import UDPMessage
 from Sockets.UDPSocket import UDPSocket
 import multiprocessing as mp
+import time
 
 
 class VideoStream(mp.Process):
@@ -154,7 +155,7 @@ class VideoStream(mp.Process):
             if self.role == VideoStream.EMITTER:
                 self.cast(img_topic)
                 img_topic = (img_topic + 1) % max_topic
-                VideoStream.delay(60000)
+                VideoStream.delay(1)
 
             # Receive packets if the VideoStream object is consumer.
             if self.role == VideoStream.CONSUMER:
@@ -257,7 +258,7 @@ class VideoStream(mp.Process):
         for msg_to_send in self.im.get_messages(topic):
             for sub in self.subs_list:
                 self.udp_socket.sendto(msg_to_send, sub)
-            VideoStream.delay(len(msg_to_send) // len(self.subs_list))
+            VideoStream.delay(1)
 
     def _get_rcv_img(self) -> np.array:
         """Return the received image.
@@ -281,9 +282,13 @@ class VideoStream(mp.Process):
         return self.external_pipe.recv()
 
     @staticmethod
-    def delay(cycle: int) -> NoReturn:
-        """Do a delay of given cycle."""
-        for i in range(cycle):
+    def delay(delay_ms: int) -> NoReturn:
+        """Wait for delay_ms microseconds.
+
+        :param delay_ms: The delay duration in ms
+        """
+        t_stop = np.int64(delay_ms * 10) + np.int64(np.float64(time.time()) * np.float64(10000000))
+        while np.int64(np.float64(time.time()) * np.float64(10000000)) <= t_stop:
             pass
 
 
