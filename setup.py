@@ -51,3 +51,5 @@ setup(
         "Operating System :: OS Independent",
     ],
 )
+
+# python setup.py egg_info --egg-base=./
