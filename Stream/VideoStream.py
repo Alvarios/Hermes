@@ -13,6 +13,7 @@ from Messages.UDPMessage import UDPMessage
 from Sockets.UDPSocket import UDPSocket
 import multiprocessing as mp
 import time
+from Polypheme.Eye import Eye
 
 
 class VideoStream(mp.Process):
@@ -43,6 +44,7 @@ class VideoStream(mp.Process):
             subs_list : A list of tuples containing ip address and port of subscribers.
             use_rcv_img_buffer : A bool that tell if received image are stored in a buffer or in a single variable.
             rcv_img_buffer : A buffer to store incoming image.
+            eye : The Eye object used to stream if from_source is not None.
     """
     EMITTER = "emitter"
     CONSUMER = "consumer"
@@ -52,7 +54,8 @@ class VideoStream(mp.Process):
                  socket_port: Optional[int] = 50000, encryption_in_transit: Optional[bool] = False,
                  max_queue_size: Optional[int] = 100, buffer_size: Optional[int] = 65543,
                  key: Optional[Union[None, bytes]] = None, enable_multicast: Optional[bool] = False,
-                 multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False):
+                 multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False,
+                 from_source: Optional[Union[int, str]] = None):
         """Create a new VideoStream object with given parameter and run the process.
 
         :param role: Tell if the VideoStream is emitter or consumer.
@@ -66,6 +69,7 @@ class VideoStream(mp.Process):
         :param enable_multicast: Specify if the socket can use multicast.
         :param multicast_ttl: A list of tuples containing ip address and port of subscribers.
         :param use_rcv_img_buffer: A bool that tell if received image are stored in a buffer or in a single variable.
+        :param from_source: Make the VideoStream stream from a source.
         """
         super().__init__(target=self.process)
         self.internal_pipe, self.external_pipe = mp.Pipe()
@@ -90,6 +94,7 @@ class VideoStream(mp.Process):
         self.rcv_img_buffer: List[np.array] = []
         if use_rcv_img_buffer is False:
             self.rcv_img_buffer.append(None)
+        self.eye = None if from_source is None else Eye(src=from_source, run_new_process=False).start()
         self.start()
 
     def _refresh_image(self, new_image: np.array) -> NoReturn:
@@ -153,6 +158,8 @@ class VideoStream(mp.Process):
                     self.internal_pipe.send(command[0](self, **command[1]))
             # Send image packets if the VideoStream object is emitter.
             if self.role == VideoStream.EMITTER:
+                if self.eye is not None:
+                    self._refresh_image(self.eye.read())
                 self.cast(img_topic)
                 img_topic = (img_topic + 1) % max_topic
                 VideoStream.delay(1)
@@ -172,6 +179,8 @@ class VideoStream(mp.Process):
         """Stop the process and its UDPSocket."""
         self.is_running = False
         self.udp_socket.stop_socket()
+        if self.eye is not None:
+            self.eye.stop()
 
     def stop(self) -> NoReturn:
         """External call to _stop"""
