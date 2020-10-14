@@ -13,6 +13,7 @@ from Messages.UDPMessage import UDPMessage
 from Sockets.UDPSocket import UDPSocket
 import multiprocessing as mp
 import time
+from Polypheme.Eye import Eye
 
 
 class VideoStream(mp.Process):
@@ -43,6 +44,8 @@ class VideoStream(mp.Process):
             subs_list : A list of tuples containing ip address and port of subscribers.
             use_rcv_img_buffer : A bool that tell if received image are stored in a buffer or in a single variable.
             rcv_img_buffer : A buffer to store incoming image.
+            from_source : Specify the source to use if needed.
+            eye : The Eye object used to stream if from_source is not None.
     """
     EMITTER = "emitter"
     CONSUMER = "consumer"
@@ -52,7 +55,8 @@ class VideoStream(mp.Process):
                  socket_port: Optional[int] = 50000, encryption_in_transit: Optional[bool] = False,
                  max_queue_size: Optional[int] = 100, buffer_size: Optional[int] = 65543,
                  key: Optional[Union[None, bytes]] = None, enable_multicast: Optional[bool] = False,
-                 multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False):
+                 multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False,
+                 from_source: Optional[Union[int, str]] = None):
         """Create a new VideoStream object with given parameter and run the process.
 
         :param role: Tell if the VideoStream is emitter or consumer.
@@ -66,6 +70,7 @@ class VideoStream(mp.Process):
         :param enable_multicast: Specify if the socket can use multicast.
         :param multicast_ttl: A list of tuples containing ip address and port of subscribers.
         :param use_rcv_img_buffer: A bool that tell if received image are stored in a buffer or in a single variable.
+        :param from_source: Make the VideoStream stream from a source.
         """
         super().__init__(target=self.process)
         self.internal_pipe, self.external_pipe = mp.Pipe()
@@ -90,6 +95,8 @@ class VideoStream(mp.Process):
         self.rcv_img_buffer: List[np.array] = []
         if use_rcv_img_buffer is False:
             self.rcv_img_buffer.append(None)
+        self.from_source = from_source
+        self.eye: Union[None, Eye] = None
         self.start()
 
     def _refresh_image(self, new_image: np.array) -> NoReturn:
@@ -140,6 +147,7 @@ class VideoStream(mp.Process):
                                     buffer_size=self.buffer_size, key=self.key, enable_multicast=self.enable_multicast,
                                     multicast_ttl=self.multicast_ttl)
         self.udp_socket.start_socket()
+        self.eye = None if self.from_source is None else Eye(src=self.from_source, run_new_process=False).start()
 
     def loop(self) -> NoReturn:
         """The main loop of the process."""
@@ -153,6 +161,8 @@ class VideoStream(mp.Process):
                     self.internal_pipe.send(command[0](self, **command[1]))
             # Send image packets if the VideoStream object is emitter.
             if self.role == VideoStream.EMITTER:
+                if self.eye is not None:
+                    self.im.refresh_image(self.eye.read())
                 self.cast(img_topic)
                 img_topic = (img_topic + 1) % max_topic
                 VideoStream.delay(1)
@@ -172,6 +182,8 @@ class VideoStream(mp.Process):
         """Stop the process and its UDPSocket."""
         self.is_running = False
         self.udp_socket.stop_socket()
+        if self.eye is not None:
+            self.eye.stop()
 
     def stop(self) -> NoReturn:
         """External call to _stop"""
@@ -333,6 +345,8 @@ class ImageManager:
         if len(new_image.shape) > 3 or len(new_image.shape) < 2 or (
                 len(new_image.shape) == 3 and new_image.shape[2] != 3):
             raise ValueError
+        if new_image.dtype == np.uint8:
+            self.current_image = new_image
         self.current_image = new_image.astype(np.uint8)
 
     def split_image(self) -> List[bytes]:
@@ -634,3 +648,33 @@ class TopicManager:
         """
         if self.in_waiting():
             return self.img_queue.pop(0)
+
+
+if __name__ == "__main__":
+    import cv2
+
+    emitter_address_port = ('127.0.0.1', 50000)
+    consumer_address_port = ('127.0.0.1', 50001)
+    emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
+                          socket_port=emitter_address_port[1], from_source=0)
+    consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
+                           socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000)
+    while emitter.get_is_running() is False:
+        pass
+    while consumer.get_is_running() is False:
+        pass
+    emitter.add_subscriber(consumer_address_port)
+    last_frame = None
+
+    cv2.namedWindow("preview")
+    cv2.imshow("preview", np.array(480 * [640 * [[255, 0, 0]]]).astype(np.uint8))
+    while True:
+        rcv_frame = consumer.get_rcv_img()
+        if rcv_frame is not None:
+            cv2.imshow("preview", rcv_frame)
+        key = cv2.waitKey(20)
+        if key == 27:  # exit on ESC
+            break
+    cv2.destroyWindow("preview")
+    # emitter.stop()
+    # consumer.stop()

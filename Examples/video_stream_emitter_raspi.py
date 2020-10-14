@@ -7,7 +7,7 @@ The consumer of this script can be the script video_stream_consumer.py
 
 from Stream.VideoStream import VideoStream
 import numpy as np
-import picamera
+from Polypheme.Eye import Eye
 import time
 
 if __name__ == "__main__":
@@ -19,27 +19,42 @@ if __name__ == "__main__":
     consumer_address_port = (consumer_ip, int(consumer_port))
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
                           socket_port=emitter_address_port[1])
-    
-    
-    with picamera.PiCamera() as camera:
-        camera.resolution = (320, 240)
-        camera.framerate = 24
-        time.sleep(2)
-        output = np.empty((240, 320, 3), dtype=np.uint8)
-        camera.capture(output, 'rgb')
 
-        while emitter.get_is_running() is False:
-            pass
-        emitter.add_subscriber(consumer_address_port)
-        red = np.array(240*[320*[[255,0,0]]])
-        green = np.array(240*[320*[[0,255,0]]])
-        blue = np.array(240*[320*[[0,0,255]]])
-        while True:
-            camera.capture(output, 'rgb')
-            #output = np.array(240*[320*[[255,0,0]]])
-            emitter.refresh_image(red)
-            #output = np.array(240*[320*[[0,255,0]]])
-            emitter.refresh_image(green)
-            #output = np.array(240*[320*[[0,0,255]]])
-            emitter.refresh_image(blue)
-        emitter.stop()
+    eye = Eye(src=0, run_new_process=False).start()
+
+    while emitter.get_is_running() is False:
+        pass
+    red = np.array(480*[640*[[255,0,0]]]).astype(np.uint8)
+    green = np.array(480*[640*[[0,255,0]]]).astype(np.uint8)
+    emitter.add_subscriber(consumer_address_port)
+    while True:
+        #emitter.refresh_image(eye.read())
+        #eye.read()
+        emitter.refresh_image(green)
+        print("ok")
+        emitter.refresh_image(red)
+
+    emitter.stop()
+
+    # with picamera.PiCamera() as camera:
+    #     camera.resolution = (320, 240)
+    #     camera.framerate = 24
+    #     time.sleep(2)
+    #     output = np.empty((240, 320, 3), dtype=np.uint8)
+    #     camera.capture(output, 'rgb')
+    #
+    #     while emitter.get_is_running() is False:
+    #         pass
+    #     emitter.add_subscriber(consumer_address_port)
+    #     red = np.array(240*[320*[[255,0,0]]])
+    #     green = np.array(240*[320*[[0,255,0]]])
+    #     blue = np.array(240*[320*[[0,0,255]]])
+    #     while True:
+    #         camera.capture(output, 'rgb')
+    #         #output = np.array(240*[320*[[255,0,0]]])
+    #         emitter.refresh_image(red)
+    #         #output = np.array(240*[320*[[0,255,0]]])
+    #         emitter.refresh_image(green)
+    #         #output = np.array(240*[320*[[0,0,255]]])
+    #         emitter.refresh_image(blue)
+    #     emitter.stop()
