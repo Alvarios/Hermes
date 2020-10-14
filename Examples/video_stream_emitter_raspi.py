@@ -20,14 +20,19 @@ if __name__ == "__main__":
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
                           socket_port=emitter_address_port[1])
 
-    eye = Eye()
+    eye = Eye(src=0, run_new_process=False).start()
 
     while emitter.get_is_running() is False:
         pass
-
+    red = np.array(480*[640*[[255,0,0]]]).astype(np.uint8)
+    green = np.array(480*[640*[[0,255,0]]]).astype(np.uint8)
     emitter.add_subscriber(consumer_address_port)
     while True:
-        emitter.refresh_image(eye.read())
+        #emitter.refresh_image(eye.read())
+        #eye.read()
+        emitter.refresh_image(green)
+        print("ok")
+        emitter.refresh_image(red)
 
     emitter.stop()
 
