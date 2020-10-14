@@ -42,6 +42,7 @@ setup(
     long_description=long_description,
     url="https://github.com/Alvarios/Hermes",
     packages=packages,
+    setup_requires=['pipenv'],
     cmdclass={
         'develop': PostDevelopCommand,
         'install': PostInstallCommand,
