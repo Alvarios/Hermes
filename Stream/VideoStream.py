@@ -14,9 +14,10 @@ from Sockets.UDPSocket import UDPSocket
 import multiprocessing as mp
 import time
 from Polypheme.Eye import Eye
+from threading import Thread
 
 
-class VideoStream(mp.Process):
+class VideoStream():
     """A class to manage video streams.
 
     This class inherit from Process to run the VideoStream on a different CPU core than parent process.
@@ -46,6 +47,7 @@ class VideoStream(mp.Process):
             rcv_img_buffer : A buffer to store incoming image.
             from_source : Specify the source to use if needed.
             eye : The Eye object used to stream if from_source is not None.
+            run_new_process : Specify if the Eye object must be run in a new process.
     """
     EMITTER = "emitter"
     CONSUMER = "consumer"
@@ -56,7 +58,7 @@ class VideoStream(mp.Process):
                  max_queue_size: Optional[int] = 100, buffer_size: Optional[int] = 65543,
                  key: Optional[Union[None, bytes]] = None, enable_multicast: Optional[bool] = False,
                  multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False,
-                 from_source: Optional[Union[int, str]] = None):
+                 from_source: Optional[Union[int, str]] = None, run_new_process: Optional[bool] = True):
         """Create a new VideoStream object with given parameter and run the process.
 
         :param role: Tell if the VideoStream is emitter or consumer.
@@ -71,8 +73,8 @@ class VideoStream(mp.Process):
         :param multicast_ttl: A list of tuples containing ip address and port of subscribers.
         :param use_rcv_img_buffer: A bool that tell if received image are stored in a buffer or in a single variable.
         :param from_source: Make the VideoStream stream from a source.
+        :param run_new_process: Specify if the Eye object must be run in a new process.
         """
-        super().__init__(target=self.process)
         self.internal_pipe, self.external_pipe = mp.Pipe()
         if role != VideoStream.EMITTER and role != VideoStream.CONSUMER:
             raise ValueError
@@ -97,7 +99,23 @@ class VideoStream(mp.Process):
             self.rcv_img_buffer.append(None)
         self.from_source = from_source
         self.eye: Union[None, Eye] = None
+        self.run_new_process = run_new_process
         self.start()
+
+    def start(self) -> NoReturn:
+        """Start a new thread or a new process for asynchronous camera reading.
+
+        :return eye: The current instance of the class.
+        """
+        if self.run_new_process is False:
+            self._start()
+        else:
+            mp.Process(target=self._start).start()
+        return self
+
+    def _start(self) -> NoReturn:
+        """Start the thread of the class."""
+        Thread(target=self._work, args=()).start()
 
     def _refresh_image(self, new_image: np.array) -> NoReturn:
         """Change the value of current image by the value of new_image.
@@ -111,6 +129,8 @@ class VideoStream(mp.Process):
 
         :param new_image: The new image to send.
         """
+        if self.run_new_process is False:
+            return self._refresh_image(new_image)
         self.external_pipe.send((VideoStream._refresh_image, {"new_image": new_image}))
         while self.external_pipe.poll() is False:
             pass
@@ -128,17 +148,19 @@ class VideoStream(mp.Process):
 
         :return current_image: The current value of current image.
         """
+        if self.run_new_process is False:
+            return self._get_current_image()
         self.external_pipe.send((VideoStream._get_current_image, {}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
 
-    def process(self) -> NoReturn:
+    def _work(self) -> NoReturn:
         """The main process of the VideoStream."""
-        self.setup()
-        self.loop()
+        self._setup()
+        self._loop()
 
-    def setup(self) -> NoReturn:
+    def _setup(self) -> NoReturn:
         """Initialization of the process."""
         self.is_running = True
         self.udp_socket = UDPSocket(socket_ip=self.socket_ip, socket_port=self.socket_port,
@@ -149,13 +171,13 @@ class VideoStream(mp.Process):
         self.udp_socket.start_socket()
         self.eye = None if self.from_source is None else Eye(src=self.from_source, run_new_process=False).start()
 
-    def loop(self) -> NoReturn:
+    def _loop(self) -> NoReturn:
         """The main loop of the process."""
         max_topic = 2 ** (8 * UDPMessage.TOPIC_LENGTH)
         img_topic = 0
         while self.is_running:
-            # Manage external call of class method.
-            if self.internal_pipe.poll():
+            # Manage external call of class method when using Process class.
+            if self.run_new_process and self.internal_pipe.poll():
                 command = self.internal_pipe.recv()
                 if type(command) is tuple:
                     self.internal_pipe.send(command[0](self, **command[1]))
@@ -165,7 +187,8 @@ class VideoStream(mp.Process):
                     self.im.refresh_image(self.eye.read())
                 self.cast(img_topic)
                 img_topic = (img_topic + 1) % max_topic
-                VideoStream.delay(1)
+                if self.run_new_process:
+                    VideoStream.delay(1)
 
             # Receive packets if the VideoStream object is consumer.
             if self.role == VideoStream.CONSUMER:
@@ -187,6 +210,8 @@ class VideoStream(mp.Process):
 
     def stop(self) -> NoReturn:
         """External call to _stop"""
+        if self.run_new_process is False:
+            return self._stop()
         self.external_pipe.send((VideoStream._stop, {}))
         while self.external_pipe.poll() is False:
             pass
@@ -204,6 +229,8 @@ class VideoStream(mp.Process):
 
         :return is_running: A bool that tell if the process is currently running.
         """
+        if self.run_new_process is False:
+            return self._get_is_running()
         self.external_pipe.send((VideoStream._get_is_running, {}))
         while self.external_pipe.poll() is False:
             pass
@@ -221,6 +248,8 @@ class VideoStream(mp.Process):
 
         :param address_port: A tuple containing the ip address and the port of the new subscriber.
         """
+        if self.run_new_process is False:
+            return self._add_subscriber(address_port)
         self.external_pipe.send((VideoStream._add_subscriber, {"address_port": address_port}))
         while self.external_pipe.poll() is False:
             pass
@@ -238,6 +267,8 @@ class VideoStream(mp.Process):
 
         :return subs_list: The list of subscribers.
         """
+        if self.run_new_process is False:
+            return self._get_subs_list()
         self.external_pipe.send((VideoStream._get_subs_list, {}))
         while self.external_pipe.poll() is False:
             pass
@@ -255,6 +286,8 @@ class VideoStream(mp.Process):
 
         :param index: The index of the subscriber to remove.
         """
+        if self.run_new_process is False:
+            return self._remove_subscriber(index)
         self.external_pipe.send((VideoStream._remove_subscriber, {"index": index}))
         while self.external_pipe.poll() is False:
             pass
@@ -270,7 +303,8 @@ class VideoStream(mp.Process):
         for msg_to_send in self.im.get_messages(topic):
             for sub in self.subs_list:
                 self.udp_socket.sendto(msg_to_send, sub)
-            VideoStream.delay(1)
+            if self.run_new_process:
+                VideoStream.delay(1)
 
     def _get_rcv_img(self) -> np.array:
         """Return the received image.
@@ -288,6 +322,8 @@ class VideoStream(mp.Process):
 
         :return rcv_img: The received image.
         """
+        if self.run_new_process is False:
+            return self.get_rcv_img()
         self.external_pipe.send((VideoStream._get_rcv_img, {}))
         while self.external_pipe.poll() is False:
             pass

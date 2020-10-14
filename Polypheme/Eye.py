@@ -58,7 +58,7 @@ class Eye:
             (self.rval, self.frame) = self.vc.read()
             self.refresh_time = (datetime.datetime.now() - start_time).total_seconds()
 
-    def start(self):
+    def start(self) -> NoReturn:
         """Start a new thread or a new process for asynchronous camera reading.
 
         :return eye: The current instance of the class.

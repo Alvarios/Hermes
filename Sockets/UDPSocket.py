@@ -4,7 +4,6 @@
 This module provides a socket for UDP communication.
 """
 from typing import NoReturn, Optional, List, Tuple, Any, Union
-from Messages.UDPMessage import UDPMessage
 import socket
 from threading import Thread
 from cryptography.fernet import Fernet
