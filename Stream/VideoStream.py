@@ -44,6 +44,7 @@ class VideoStream(mp.Process):
             subs_list : A list of tuples containing ip address and port of subscribers.
             use_rcv_img_buffer : A bool that tell if received image are stored in a buffer or in a single variable.
             rcv_img_buffer : A buffer to store incoming image.
+            from_source : Specify the source to use if needed.
             eye : The Eye object used to stream if from_source is not None.
     """
     EMITTER = "emitter"
@@ -94,7 +95,8 @@ class VideoStream(mp.Process):
         self.rcv_img_buffer: List[np.array] = []
         if use_rcv_img_buffer is False:
             self.rcv_img_buffer.append(None)
-        self.eye = None if from_source is None else Eye(src=from_source, run_new_process=False).start()
+        self.from_source = from_source
+        self.eye: Union[None, Eye] = None
         self.start()
 
     def _refresh_image(self, new_image: np.array) -> NoReturn:
@@ -145,6 +147,7 @@ class VideoStream(mp.Process):
                                     buffer_size=self.buffer_size, key=self.key, enable_multicast=self.enable_multicast,
                                     multicast_ttl=self.multicast_ttl)
         self.udp_socket.start_socket()
+        self.eye = None if self.from_source is None else Eye(src=self.from_source, run_new_process=False).start()
 
     def loop(self) -> NoReturn:
         """The main loop of the process."""
@@ -643,3 +646,33 @@ class TopicManager:
         """
         if self.in_waiting():
             return self.img_queue.pop(0)
+
+
+if __name__ == "__main__":
+    import cv2
+
+    emitter_address_port = ('127.0.0.1', 50000)
+    consumer_address_port = ('127.0.0.1', 50001)
+    emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
+                          socket_port=emitter_address_port[1], from_source=0)
+    consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
+                           socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000)
+    while emitter.get_is_running() is False:
+        pass
+    while consumer.get_is_running() is False:
+        pass
+    emitter.add_subscriber(consumer_address_port)
+    last_frame = None
+
+    cv2.namedWindow("preview")
+    cv2.imshow("preview", np.array(480 * [640 * [[255, 0, 0]]]).astype(np.uint8))
+    while True:
+        rcv_frame = consumer.get_rcv_img()
+        if rcv_frame is not None:
+            cv2.imshow("preview", rcv_frame)
+        key = cv2.waitKey(20)
+        if key == 27:  # exit on ESC
+            break
+    cv2.destroyWindow("preview")
+    # emitter.stop()
+    # consumer.stop()
