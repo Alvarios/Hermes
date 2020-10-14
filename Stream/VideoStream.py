@@ -385,14 +385,17 @@ class ImageManager:
             self.current_image = new_image
         self.current_image = new_image.astype(np.uint8)
 
-    def split_image(self) -> List[bytes]:
+    def split_image(self) -> map:
         """Split current_image into bytes with a maximal length of max_packet_size.
 
         :return list_split_img: A list of bytes representing the current_image.
         """
-        flat_img = self.current_image.flatten().astype(np.uint8)
-        return [bytes(flat_img[i * self.max_packet_size: self.max_packet_size + i * self.max_packet_size]) for i in
-                range(math.ceil(np.array(self.current_image.shape).prod() / self.max_packet_size))]
+        return map(lambda x: x.tobytes(), np.array_split(self.current_image.flatten().astype(np.uint8),
+                                                         math.ceil(np.array(
+                                                             self.current_image.shape).prod() / self.max_packet_size)))
+        # flat_img = self.current_image.flatten().astype(np.uint8)
+        # return [bytes(flat_img[i * self.max_packet_size: self.max_packet_size + i * self.max_packet_size]) for i in
+        #         range(math.ceil(np.array(self.current_image.shape).prod() / self.max_packet_size))]
 
     @staticmethod
     def get_header_msg(topic: int, nb_packet: int, total_bytes: int, height: int, length: int,
@@ -432,7 +435,7 @@ class ImageManager:
             UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=e, topic=topic, message_nb=i + 1).to_bytes() for
             i, e
             in enumerate(img_split)]
-        header = ImageManager.get_header_msg(topic, len(img_split), int(np.array(self.current_image.shape).prod()),
+        header = ImageManager.get_header_msg(topic, len(img_messages), int(np.array(self.current_image.shape).prod()),
                                              self.current_image.shape[0], self.current_image.shape[1],
                                              self.get_pixel_size())
         return [header] + img_messages
