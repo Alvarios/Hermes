@@ -162,7 +162,7 @@ class VideoStream(mp.Process):
             # Send image packets if the VideoStream object is emitter.
             if self.role == VideoStream.EMITTER:
                 if self.eye is not None:
-                    self._refresh_image(self.eye.read())
+                    self.im.refresh_image(self.eye.read())
                 self.cast(img_topic)
                 img_topic = (img_topic + 1) % max_topic
                 VideoStream.delay(1)
@@ -345,6 +345,8 @@ class ImageManager:
         if len(new_image.shape) > 3 or len(new_image.shape) < 2 or (
                 len(new_image.shape) == 3 and new_image.shape[2] != 3):
             raise ValueError
+        if new_image.dtype == np.uint8:
+            self.current_image = new_image
         self.current_image = new_image.astype(np.uint8)
 
     def split_image(self) -> List[bytes]:
