@@ -444,6 +444,38 @@ class ImageManager:
         # return [header] + list(img_messages)
         return chain([header], img_messages)
 
+    def get_messages_express(self, img, topic):
+        header = UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, topic=topic, message_nb=ImageManager.NB_MSG_HEADER,
+                            payload=math.ceil(np.array(
+                                img.shape).prod() / self.max_packet_size).to_bytes(
+                                ImageManager.NB_PACKET_SIZE, 'little') + int(np.array(img).prod()).to_bytes(
+                                ImageManager.TOTAL_BYTES_SIZE, 'little') + img.shape[0].to_bytes(
+                                ImageManager.HEIGHT_SIZE,
+                                'little') + img.shape[1].to_bytes(
+                                ImageManager.LENGTH_SIZE, 'little') + (3 if len(img) == 3 else 1).to_bytes(
+                                ImageManager.SIZE_PIXEL_SIZE, 'little')).to_bytes()
+        img_split = map(lambda x: x.tobytes(), np.array_split(img.flatten(), math.ceil(np.array(
+            img.shape).prod() / self.max_packet_size)))
+        to_msg = lambda enum: UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
+                                         message_nb=enum[0] + 1).to_bytes()
+        img_messages = map(to_msg, enumerate(img_split))
+        return chain([header], img_messages)
+
+        # return chain(
+        #     [UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, topic=topic, message_nb=ImageManager.NB_MSG_HEADER,
+        #                 payload=math.ceil(np.array(
+        #                     img.shape).prod() / self.max_packet_size).to_bytes(
+        #                     ImageManager.NB_PACKET_SIZE, 'little') + int(np.array(img).prod()).to_bytes(
+        #                     ImageManager.TOTAL_BYTES_SIZE, 'little') + img.shape[0].to_bytes(
+        #                     ImageManager.HEIGHT_SIZE,
+        #                     'little') + img.shape[1].to_bytes(
+        #                     ImageManager.LENGTH_SIZE, 'little') + (3 if len(img) == 3 else 1).to_bytes(
+        #                     ImageManager.SIZE_PIXEL_SIZE, 'little')).to_bytes()],
+        #     map(lambda enum: UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
+        #                                 message_nb=enum[0] + 1).to_bytes(),
+        #         enumerate(map(lambda x: x.tobytes(), np.array_split(img.flatten(), math.ceil(np.array(
+        #             img.shape).prod() / self.max_packet_size))))))
+
 
 class VideoTopic:
     """A class designed rebuild an image received in many packets.

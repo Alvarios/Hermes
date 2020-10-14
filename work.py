@@ -10,8 +10,9 @@ time.sleep(2)
 print("Start")
 start = time.time()
 for i in range(n_iter):
-    im.refresh_image(eye.read())
-    im.get_messages(i)
+    im.get_messages_express(eye.read(), i)
+    # im.refresh_image(eye.read())
+    # im.get_messages(i)
 
 dt = (time.time() - start)
 eye.stop()
