@@ -15,6 +15,7 @@ import multiprocessing as mp
 import time
 from Polypheme.Eye import Eye
 from threading import Thread
+from itertools import chain
 
 
 class VideoStream():
@@ -388,11 +389,10 @@ class ImageManager:
     def split_image(self) -> map:
         """Split current_image into bytes with a maximal length of max_packet_size.
 
-        :return list_split_img: A list of bytes representing the current_image.
+        :return split_img: An iterator containing bytes representing the current_image.
         """
-        return map(lambda x: x.tobytes(), np.array_split(self.current_image.flatten().astype(np.uint8),
-                                                         math.ceil(np.array(
-                                                             self.current_image.shape).prod() / self.max_packet_size)))
+        return map(lambda x: x.tobytes(), np.array_split(self.current_image.flatten(), math.ceil(np.array(
+            self.current_image.shape).prod() / self.max_packet_size)))
         # flat_img = self.current_image.flatten().astype(np.uint8)
         # return [bytes(flat_img[i * self.max_packet_size: self.max_packet_size + i * self.max_packet_size]) for i in
         #         range(math.ceil(np.array(self.current_image.shape).prod() / self.max_packet_size))]
@@ -424,21 +424,25 @@ class ImageManager:
         """
         return 3 if len(self.current_image.shape) == 3 else 1
 
-    def get_messages(self, topic: int) -> List[bytes]:
+    def get_messages(self, topic: int) -> iter:
         """Return a list of bytes representing the messages to send.
 
         :param topic: The topic associated to the image.
-        :return messages: The list of bytes representing the messages to send.
+        :return messages: An iterator containing the the messages to send as bytes.
         """
         img_split = self.split_image()
-        img_messages = [
-            UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=e, topic=topic, message_nb=i + 1).to_bytes() for
-            i, e
-            in enumerate(img_split)]
-        header = ImageManager.get_header_msg(topic, len(img_messages), int(np.array(self.current_image.shape).prod()),
+        to_msg = lambda enum: UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
+                                         message_nb=enum[0] + 1).to_bytes()
+        img_messages = map(to_msg, enumerate(img_split))
+        # img_messages = [
+        #     UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=e, topic=topic, message_nb=i + 1).to_bytes() for
+        #     i, e in enumerate(img_split)]
+        header = ImageManager.get_header_msg(topic, math.ceil(np.array(
+            self.current_image.shape).prod() / self.max_packet_size), int(np.array(self.current_image.shape).prod()),
                                              self.current_image.shape[0], self.current_image.shape[1],
                                              self.get_pixel_size())
-        return [header] + img_messages
+        # return [header] + list(img_messages)
+        return chain([header], img_messages)
 
 
 class VideoTopic:

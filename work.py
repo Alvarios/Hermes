@@ -13,13 +13,14 @@ for i in range(n_iter):
     im.refresh_image(eye.read())
     im.get_messages(i)
 
-# print(im.split_image())
-print(type(im.split_image()))
-# print(len(im.split_image()))
 dt = (time.time() - start)
 eye.stop()
 print(1 / (dt / n_iter))
 print(dt)
 
-# 354.9623928777193
-# 28.171998500823975
+# 496.1280879282382
+# 22.720658540725708
+
+
+# 477.94057865247504
+# 20.923103094100952

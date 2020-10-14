@@ -153,16 +153,14 @@ def test_get_messages_correctly_return_a_list_of_message_to_send_that_represent_
     length = 16
     pixel_size = 3
     expected_topic = 10
-    split_img = im.split_image()
     expected_header = nb_packet.to_bytes(ImageManager.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
         ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE, 'little') + length.to_bytes(
         ImageManager.LENGTH_SIZE, 'little') + pixel_size.to_bytes(ImageManager.SIZE_PIXEL_SIZE, 'little')
 
     # When
-    result = im.get_messages(expected_topic)
+    result = list(im.get_messages(expected_topic))
 
     # Then
-    assert len(result) == len(split_img) + 1
     assert collections.Counter(UDPMessage.from_bytes(result[0]).payload) == collections.Counter(list(expected_header))
     for i in range(1, len(result)):
         msg = UDPMessage.from_bytes(result[i])

@@ -42,8 +42,6 @@ if __name__ == "__main__":
         if rcv_frame is not None:
             last_frame = rcv_frame
             cpt += 1
-            print(rcv_frame.shape)
-            print(rcv_frame.dtype)
         cv2.imshow("preview", last_frame)
 
         key = cv2.waitKey(20)

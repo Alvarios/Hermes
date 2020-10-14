@@ -10,7 +10,7 @@ def get_msg_sample():
     new_image = np.array(4 * [4 * 4 * [[0, 0, 0]]])
     im = ImageManager(max_packet_size=64)
     im.refresh_image(new_image)
-    return im.get_messages(1)
+    return list(im.get_messages(1))
 
 
 def test_topic_manager_is_created_with_empty_open_topic_and_img_queue():
@@ -121,7 +121,7 @@ def test_process_dlq_correctly_remove_outdated_messages_from_dlq(get_msg_sample)
     new_image = np.array(4 * [4 * 4 * [[0, 0, 0]]])
     im = ImageManager(max_packet_size=64)
     im.refresh_image(new_image)
-    new_messages = im.get_messages(2)
+    new_messages = list(im.get_messages(2))
     tm.add_message(UDPMessage.from_bytes(new_messages[1]))
 
     # When
@@ -157,7 +157,7 @@ def test_check_topic_remove_old_opened_topic_when_a_topic_is_completed(get_msg_s
     new_image = np.array(4 * [4 * 4 * [[0, 0, 0]]])
     im = ImageManager(max_packet_size=64)
     im.refresh_image(new_image)
-    new_messages = im.get_messages(2)
+    new_messages = list(im.get_messages(2))
     tm.add_message(UDPMessage.from_bytes(new_messages[0]))
 
     # When
