@@ -654,8 +654,11 @@ class VideoTopic:
                 or self.total_bytes % self.length != 0:
             return None
         if self.pixel_size != 1:
-            return np.concatenate([np.frombuffer(i.payload, np.uint8) for i in self.rcv_messages]).reshape(
-                (self.height, self.length, self.pixel_size)).astype(np.uint8)
+            try:
+                return np.concatenate([np.frombuffer(i.payload, np.uint8) for i in self.rcv_messages]).reshape(
+                    (self.height, self.length, self.pixel_size)).astype(np.uint8)
+            except:
+                return None
             # return np.concatenate([list(i.payload) for i in self.rcv_messages]).reshape((self.height, self.length,
             #                                                                              self.pixel_size)).astype(
             #     np.uint8)
@@ -756,7 +759,7 @@ class TopicManager:
         remaining_messages = []
         for msg in self.dead_letter_queue:
             if type(msg) is list:
-                print("WTF?!!")
+                #print("WTF?!!")
                 continue
             if int.from_bytes(msg.topic, 'little') in self.open_topic.keys():
                 self.add_message(msg)
