@@ -4,13 +4,15 @@
 This module provides a socket for UDP communication.
 """
 from typing import NoReturn, Optional, List, Tuple, Any, Union
-from Messages.UDPMessage import UDPMessage
+# from gevent import socket
 import socket
 from threading import Thread
 from cryptography.fernet import Fernet
+# from gevent import monkey
+# monkey.patch_socket()
 
 
-class UDPSocket(Thread):
+class UDPSocket:
     """A socket for UDP communication.
 
 
@@ -27,12 +29,14 @@ class UDPSocket(Thread):
             fernet_encoder : The encoder used to encrypt and decrypt messages.
             enable_multicast : Specify if the socket can use multicast.
             multicast_ttl : The TTL used for multicast.
+            must_listen : Define if the socket must listen for messages.
     """
 
     def __init__(self, socket_ip: Optional[str] = "127.0.0.1", socket_port: Optional[int] = 50000,
                  encryption_in_transit: Optional[bool] = False, max_queue_size: Optional[int] = 100,
                  buffer_size: Optional[int] = 65543, key: Optional[Union[None, bytes]] = None,
-                 enable_multicast: Optional[bool] = False, multicast_ttl: Optional[int] = 2) -> None:
+                 enable_multicast: Optional[bool] = False, multicast_ttl: Optional[int] = 2,
+                 must_listen: Optional[bool] = True, setblocking: Optional[bool] = True) -> None:
         """Create a new UDPSocket object with given parameters.
 
         :param socket_ip: The ip used to bind the socket.
@@ -43,8 +47,9 @@ class UDPSocket(Thread):
         :param key: The encryption key used to encrypt message. If no value is provided it will generate a new one.
         :param enable_multicast: Specify if the socket can use multicast.
         :param multicast_ttl: The TTL used for multicast.
+        :param must_listen: Define if the socket must listen for messages.
+        :param setblocking: Define if the socket must block.
         """
-        Thread.__init__(self)
         self.socket_ip = socket_ip
         self.socket_port = socket_port
         self.encryption_in_transit: bool = encryption_in_transit
@@ -57,27 +62,43 @@ class UDPSocket(Thread):
         self.fernet_encoder: Fernet = Fernet(self.key)
         self.enable_multicast: bool = enable_multicast
         self.multicast_ttl: int = multicast_ttl
+        self.must_listen = must_listen
+        self.socket.setblocking(setblocking)
 
-    def start_socket(self) -> NoReturn:
+    def start(self) -> NoReturn:
         """Start the socket and run the listening thread."""
         self.is_running = True
         self.socket.bind((self.socket_ip, self.socket_port))
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if self.enable_multicast:
             self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, self.multicast_ttl)
-        self.start()
+        if self.must_listen:
+            Thread(target=self._work, args=()).start()
 
     def run(self) -> NoReturn:
         """Main loop of the listening thread."""
         while self.is_running:
             self.listen()
 
-    def stop_socket(self) -> NoReturn:
+    def stop(self) -> NoReturn:
         """Stop the listening thread."""
         self.is_running = False
-        self.socket.shutdown(socket.SHUT_RD)
-        self.socket.close()
-        self.join()
+        try:
+            self.socket.close()
+            # self.socket.shutdown(socket.SHUT_RD)
+        except:
+            pass
+
+    def _work(self):
+        self._setup()
+        self._loop()
+
+    def _setup(self):
+        pass
+
+    def _loop(self):
+        while self.is_running:
+            self.listen()
 
     def listen(self) -> NoReturn:
         """Add incoming messages to the queue and decrypt it if needed."""

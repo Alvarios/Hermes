@@ -5,19 +5,6 @@ import pytest
 import time
 
 
-def test_video_stream_is_instance_of_process():
-    # Given
-    expected_type = mp.Process
-
-    # When
-    vs = VideoStream()
-
-    # Then
-    assert isinstance(vs, expected_type)
-    vs.stop()
-    vs.join()
-
-
 def test_video_stream_define_an_image_manager_with_correct_parameter():
     # Given
     expected_type = ImageManager
@@ -30,7 +17,6 @@ def test_video_stream_define_an_image_manager_with_correct_parameter():
     assert isinstance(vs.im, expected_type)
     assert vs.im.max_packet_size == max_packet_size
     vs.stop()
-    vs.join()
 
 
 def test_video_stream_define_an_empty_list_of_video_topic():
@@ -43,7 +29,6 @@ def test_video_stream_define_an_empty_list_of_video_topic():
     # Then
     assert vs.opened_topics == []
     vs.stop()
-    vs.join()
 
 
 def test_refresh_image_correctly_refresh_image_in_im():
@@ -58,7 +43,6 @@ def test_refresh_image_correctly_refresh_image_in_im():
     # Then
     assert np.array_equiv(vs.get_current_image(), expected_img)
     vs.stop()
-    vs.join()
 
 
 def test_video_stream_is_created_with_correct_role():
@@ -75,9 +59,7 @@ def test_video_stream_is_created_with_correct_role():
     assert vs2.role == role_2
 
     vs1.stop()
-    vs1.join()
     vs2.stop()
-    vs2.join()
 
 
 def test_video_stream_cannot_be_created_with_unexpected_role():
@@ -105,7 +87,6 @@ def test_video_stream_create_two_connection_pipe():
     assert type(vs.internal_pipe) == expected_type
 
     vs.stop()
-    vs.join()
 
 
 def test_video_stream_can_be_started_and_stopped():
@@ -119,7 +100,6 @@ def test_video_stream_can_be_started_and_stopped():
     # Then
     assert vs.get_is_running()
     vs.stop()
-    vs.join()
 
 
 def test_add_subscriber_correctly_add_a_subscriber():
@@ -137,7 +117,6 @@ def test_add_subscriber_correctly_add_a_subscriber():
     assert vs.get_subs_list()[0] == sub_address_port
 
     vs.stop()
-    vs.join()
 
 
 def test_remove_subscriber_correctly_remove_a_subscriber():
@@ -155,7 +134,6 @@ def test_remove_subscriber_correctly_remove_a_subscriber():
     assert len(vs.get_subs_list()) == 0
 
     vs.stop()
-    vs.join()
 
 
 def test_get_rcv_img_return_none_if_rcv_img_buffer_is_empty():
@@ -173,7 +151,6 @@ def test_get_rcv_img_return_none_if_rcv_img_buffer_is_empty():
     assert result is None
 
     vs.stop()
-    vs.join()
 
 
 def test_two_video_stream_can_transmit_images():
@@ -201,8 +178,6 @@ def test_two_video_stream_can_transmit_images():
     assert np.array_equiv(result, expected_img)
 
     emitter.stop()
-    emitter.join()
     consumer.stop()
-    consumer.join()
 
 # python -m pytest -s -vv Stream/test/test_VideoStream.py

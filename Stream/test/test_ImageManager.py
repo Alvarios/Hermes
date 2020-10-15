@@ -99,10 +99,14 @@ def test_get_header_msg_correctly_return_an_array_of_bytes_with_correct_metadata
     height = 2
     length = 25
     pixel_size = 3
+    encoding = 0
 
     expected_payload = nb_packet.to_bytes(ImageManager.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
-        ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE, 'little') + length.to_bytes(
-        ImageManager.LENGTH_SIZE, 'little') + pixel_size.to_bytes(ImageManager.SIZE_PIXEL_SIZE, 'little')
+        ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE,
+                                                                   'little') + length.to_bytes(
+        ImageManager.LENGTH_SIZE, 'little') + pixel_size.to_bytes(ImageManager.SIZE_PIXEL_SIZE,
+                                                                  'little') + encoding.to_bytes(
+        ImageManager.ENCODING_SIZE, 'little')
     expected_topic = 10
 
     # When
@@ -153,20 +157,21 @@ def test_get_messages_correctly_return_a_list_of_message_to_send_that_represent_
     length = 16
     pixel_size = 3
     expected_topic = 10
-    split_img = im.split_image()
+    encoding = 0
     expected_header = nb_packet.to_bytes(ImageManager.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
-        ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE, 'little') + length.to_bytes(
-        ImageManager.LENGTH_SIZE, 'little') + pixel_size.to_bytes(ImageManager.SIZE_PIXEL_SIZE, 'little')
+        ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE,
+                                                                   'little') + length.to_bytes(
+        ImageManager.LENGTH_SIZE, 'little') + pixel_size.to_bytes(ImageManager.SIZE_PIXEL_SIZE,
+                                                                  'little') + encoding.to_bytes(
+        ImageManager.ENCODING_SIZE, 'little')
 
     # When
-    result = im.get_messages(expected_topic)
+    result = list(im.get_messages(expected_topic))
 
     # Then
-    assert len(result) == len(split_img) + 1
     assert collections.Counter(UDPMessage.from_bytes(result[0]).payload) == collections.Counter(list(expected_header))
     for i in range(1, len(result)):
         msg = UDPMessage.from_bytes(result[i])
         assert int.from_bytes(msg.message_nb, 'little') == i
         assert int.from_bytes(msg.topic, 'little') == expected_topic
         assert msg.payload == bytes(64 * [0])
-
