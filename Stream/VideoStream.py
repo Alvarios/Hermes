@@ -169,12 +169,13 @@ class VideoStream:
     def _setup(self) -> NoReturn:
         """Initialization of the process."""
         self.is_running = True
+        must_listen = self.role == VideoStream.CONSUMER
         self.udp_socket = UDPSocket(socket_ip=self.socket_ip, socket_port=self.socket_port,
                                     encryption_in_transit=self.encryption_in_transit,
                                     max_queue_size=self.max_queue_size,
                                     buffer_size=self.buffer_size, key=self.key, enable_multicast=self.enable_multicast,
-                                    multicast_ttl=self.multicast_ttl)
-        self.udp_socket.start_socket()
+                                    multicast_ttl=self.multicast_ttl, must_listen=must_listen)
+        self.udp_socket.start()
         self.eye = None if self.from_source is None else Eye(src=self.from_source, run_new_process=False).start()
         self.im = self.im.start()
 
@@ -211,7 +212,7 @@ class VideoStream:
     def _stop(self) -> NoReturn:
         """Stop the process and its UDPSocket."""
         self.is_running = False
-        self.udp_socket.stop_socket()
+        self.udp_socket.stop()
         if self.im.async_msg_generation is True:
             self.im.stop()
         if self.eye is not None:
