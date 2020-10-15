@@ -16,6 +16,7 @@ import time
 from Polypheme.Eye import Eye
 from threading import Thread
 from itertools import chain
+import cv2
 
 
 class VideoStream:
@@ -50,7 +51,8 @@ class VideoStream:
             eye : The Eye object used to stream if from_source is not None.
             run_new_process : Specify if the Eye object must be run in a new process.
             async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
-
+            encoding: Define the encoding used to send images.
+            compress_rate: Define the compress rate of the image.
     """
     EMITTER = "emitter"
     CONSUMER = "consumer"
@@ -62,7 +64,8 @@ class VideoStream:
                  key: Optional[Union[None, bytes]] = None, enable_multicast: Optional[bool] = False,
                  multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False,
                  from_source: Optional[Union[int, str]] = None, run_new_process: Optional[bool] = True,
-                 async_msg_generation: Optional[bool] = False):
+                 async_msg_generation: Optional[bool] = False, encoding: Optional[int] = 0,
+                 compress_rate: Optional[int] = 0):
         """Create a new VideoStream object with given parameter and run the process.
 
         :param role: Tell if the VideoStream is emitter or consumer.
@@ -79,12 +82,15 @@ class VideoStream:
         :param from_source: Make the VideoStream stream from a source.
         :param run_new_process: Specify if the Eye object must be run in a new process.
         :param async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
+        :param encoding: Define the encoding used to send images.
+        :param compress_rate: Define the compress rate of the image.
         """
         self.internal_pipe, self.external_pipe = mp.Pipe()
         if role != VideoStream.EMITTER and role != VideoStream.CONSUMER:
             raise ValueError
         self.role = role
-        self.im: ImageManager = ImageManager(max_packet_size=max_packet_size, async_msg_generation=async_msg_generation)
+        self.im: ImageManager = ImageManager(max_packet_size=max_packet_size, async_msg_generation=async_msg_generation,
+                                             encoding=encoding, compress_rate=compress_rate)
         self.opened_topics: List[VideoTopic] = []
         self.udp_socket: Union[UDPSocket, None] = None
         self.socket_ip = socket_ip
@@ -106,6 +112,8 @@ class VideoStream:
         self.eye: Union[None, Eye] = None
         self.run_new_process = run_new_process
         self.async_msg_generation = async_msg_generation
+        self.encoding = encoding
+        self.compress_rate = compress_rate
         self.start()
 
     def start(self) -> NoReturn:
@@ -202,6 +210,8 @@ class VideoStream:
             if self.role == VideoStream.CONSUMER:
                 while self.udp_socket.in_waiting():
                     msg = UDPMessage.from_bytes(self.udp_socket.pull()[0])
+                    if type(msg) is not UDPMessage:
+                        continue
                     self.tm.add_message(msg)
                 if self.tm.in_waiting():
                     if self.use_rcv_img_buffer:
@@ -359,8 +369,10 @@ class ImageManager:
             HEIGHT_SIZE : The number of bytes to store height of the image.
             LENGTH_SIZE : The number of bytes to store length of the image.
             SIZE_PIXEL_SIZE : The number of bytes to store the size of a pixel (in bytes).
+            ENCODING_SIZE : The number of bytes to encoding.
             VIDEO_PACKET_ID : The message id used for udp packet.
             NB_MSG_HEADER : The message number of the header in the topic.
+            ENCODING_DICT : A dictionary containing available encoding method and their corresponding code.
 
         Attributes :
             current_image : The current image to send.
@@ -370,6 +382,8 @@ class ImageManager:
             async_msg_generation : Specify if the messages representing the image must be generated asynchronously.
             messages : The asynchronously generated messages.
             is_running : Specify if the associated Thread is running (used for async message processing).
+            param encoding : Define the encoding used to send images.
+            param compress_rate : Define the compress rate of the image.
 
     """
     NB_PACKET_SIZE = 4
@@ -377,14 +391,19 @@ class ImageManager:
     HEIGHT_SIZE = 4
     LENGTH_SIZE = 4
     SIZE_PIXEL_SIZE = 1
+    ENCODING_SIZE = 1
     VIDEO_PACKET_ID = 210
     NB_MSG_HEADER = 0
+    ENCODING_DICT = {1: ".jpg"}
 
-    def __init__(self, max_packet_size: Optional[int] = 5000, async_msg_generation=False) -> None:
+    def __init__(self, max_packet_size: Optional[int] = 5000, async_msg_generation: Optional[bool] = False,
+                 encoding: Optional[int] = 0, compress_rate: Optional[int] = 100) -> None:
         """Create a new ImageManager with given parameters.
 
         :param max_packet_size: The max size of a packet (in byte).
         :param async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
+        :param encoding: Define the encoding used to send images.
+        :param compress_rate: Define the compress rate of the image.
         """
         self.current_image: np.array = np.array([])
         self._new_image = False
@@ -393,6 +412,8 @@ class ImageManager:
         self.async_msg_generation = async_msg_generation
         self.messages: iter = iter([])
         self.is_running = False
+        self.encoding = encoding
+        self.compress_rate = compress_rate
 
     def start(self):
         if self.async_msg_generation:
@@ -424,6 +445,8 @@ class ImageManager:
 
         :param new_image: The new image to process.
         """
+        if self._new_image and self.async_msg_generation:
+            return
         if len(new_image.shape) > 3 or len(new_image.shape) < 2 or (
                 len(new_image.shape) == 3 and new_image.shape[2] != 3):
             raise ValueError
@@ -438,15 +461,18 @@ class ImageManager:
 
         :return split_img: An iterator containing bytes representing the current_image.
         """
-        return map(lambda x: x.tobytes(), np.array_split(self.current_image.flatten(), math.ceil(np.array(
-            self.current_image.shape).prod() / self.max_packet_size)))
-        # flat_img = self.current_image.flatten().astype(np.uint8)
-        # return [bytes(flat_img[i * self.max_packet_size: self.max_packet_size + i * self.max_packet_size]) for i in
-        #         range(math.ceil(np.array(self.current_image.shape).prod() / self.max_packet_size))]
+        if self.encoding == 0:
+            return map(lambda x: x.tobytes(), np.array_split(self.current_image.flatten(), math.ceil(np.array(
+                self.current_image.shape).prod() / self.max_packet_size)))
+        if self.encoding in ImageManager.ENCODING_DICT.keys():
+            params = [int(cv2.IMWRITE_JPEG_QUALITY), self.compress_rate]
+            rslt, img = cv2.imencode(ImageManager.ENCODING_DICT[self.encoding], self.current_image, params)
+            return map(lambda x: x.tobytes(), np.array_split(img.flatten(), math.ceil(np.array(
+                self.current_image.shape).prod() / self.max_packet_size)))
 
     @staticmethod
     def get_header_msg(topic: int, nb_packet: int, total_bytes: int, height: int, length: int,
-                       pixel_size: int) -> bytes:
+                       pixel_size: int, encoding: Optional[int] = 0) -> bytes:
         """Return a UDPMessage with image metadata.
 
         :param topic: The topic associated to the image.
@@ -455,6 +481,7 @@ class ImageManager:
         :param height: The height of the image.
         :param length: The length of the image.
         :param pixel_size: The size of a pixel.
+        :param encoding: The encoding of the pixel (default 0 = None).
         :return header_msg: The UDPMessage containing image metadata.
         """
         return UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, topic=topic, message_nb=ImageManager.NB_MSG_HEADER,
@@ -462,7 +489,8 @@ class ImageManager:
                               ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE,
                                                                                          'little') + length.to_bytes(
                               ImageManager.LENGTH_SIZE, 'little') + pixel_size.to_bytes(
-                              ImageManager.SIZE_PIXEL_SIZE, 'little')).to_bytes()
+                              ImageManager.SIZE_PIXEL_SIZE, 'little') + encoding.to_bytes(
+                              ImageManager.ENCODING_SIZE, 'little')).to_bytes()
 
     def get_pixel_size(self) -> int:
         """Return the size of a pixel.
@@ -490,7 +518,7 @@ class ImageManager:
         header = ImageManager.get_header_msg(topic, math.ceil(np.array(
             self.current_image.shape).prod() / self.max_packet_size), int(np.array(self.current_image.shape).prod()),
                                              self.current_image.shape[0], self.current_image.shape[1],
-                                             self.get_pixel_size())
+                                             self.get_pixel_size(), encoding=self.encoding)
         # return [header] + list(img_messages)
         return chain([header], img_messages)
 
@@ -508,10 +536,12 @@ class VideoTopic:
             rcv_messages : The list of received packets.
             rcv_error : A flag that tell if a reception error has been detected.
             count_rcv_msg : Count the number of message that have been received.
+            encoding : Encoding used for image transmission.
 
     """
 
-    def __init__(self, nb_packet, total_bytes, height, length, pixel_size, time_creation) -> None:
+    def __init__(self, nb_packet: int, total_bytes: int, height: int, length: int, pixel_size: int, time_creation: int,
+                 encoding: Optional[int] = 0) -> None:
         """Create a new VideoTopic object.
 
         :param nb_packet: The number of expected packets.
@@ -530,6 +560,7 @@ class VideoTopic:
         self.rcv_messages: List[Union[UDPMessage, None]] = [None for i in range(nb_packet)]
         self.rcv_error = False
         self.count_rcv_msg = 0
+        self.encoding = encoding
 
     @property
     def nb_packet(self) -> int:
@@ -578,6 +609,8 @@ class VideoTopic:
 
         :param new_message: The message to add to the topic.
         """
+        if type(new_message) is not UDPMessage:
+            return
         self.count_rcv_msg += 1
         if int.from_bytes(new_message.message_nb, 'little') > self.nb_packet or int.from_bytes(new_message.message_nb,
                                                                                                'little') <= 0:
@@ -609,6 +642,14 @@ class VideoTopic:
 
         :return image: The image encoded in the received messages. None if an error is detected.
         """
+        if self.encoding != 0:
+            try:
+                encoded_img = np.concatenate([np.frombuffer(i.payload, np.uint8) for i in self.rcv_messages])
+                encoded_img = encoded_img.reshape(len(encoded_img), 1)
+                return cv2.imdecode(encoded_img, 1)
+            except:
+                return None
+
         if self.total_bytes % self.pixel_size != 0 or self.total_bytes % self.height != 0 \
                 or self.total_bytes % self.length != 0:
             return None
@@ -640,8 +681,10 @@ class VideoTopic:
         length = int.from_bytes(payload[cursor_pos:cursor_pos + ImageManager.LENGTH_SIZE], 'little')
         cursor_pos += ImageManager.LENGTH_SIZE
         pixel_size = int.from_bytes(payload[cursor_pos:cursor_pos + ImageManager.SIZE_PIXEL_SIZE], 'little')
+        cursor_pos += ImageManager.SIZE_PIXEL_SIZE
+        encoding = int.from_bytes(payload[cursor_pos:cursor_pos + ImageManager.ENCODING_SIZE], 'little')
         time_creation = int.from_bytes(new_msg.time_creation, 'little')
-        return VideoTopic(nb_packet, total_bytes, height, length, pixel_size, time_creation)
+        return VideoTopic(nb_packet, total_bytes, height, length, pixel_size, time_creation, encoding=encoding)
 
 
 class TopicManager:
@@ -712,6 +755,9 @@ class TopicManager:
         new_topic_time: int = self.open_topic[new_topic].time_creation
         remaining_messages = []
         for msg in self.dead_letter_queue:
+            if type(msg) is list:
+                print("WTF?!!")
+                continue
             if int.from_bytes(msg.topic, 'little') in self.open_topic.keys():
                 self.add_message(msg)
             elif int.from_bytes(msg.time_creation, 'little') >= new_topic_time:
