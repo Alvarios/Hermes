@@ -18,7 +18,7 @@ from threading import Thread
 from itertools import chain
 
 
-class VideoStream():
+class VideoStream:
     """A class to manage video streams.
 
     This class inherit from Process to run the VideoStream on a different CPU core than parent process.
@@ -49,6 +49,8 @@ class VideoStream():
             from_source : Specify the source to use if needed.
             eye : The Eye object used to stream if from_source is not None.
             run_new_process : Specify if the Eye object must be run in a new process.
+            async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
+
     """
     EMITTER = "emitter"
     CONSUMER = "consumer"
@@ -59,7 +61,8 @@ class VideoStream():
                  max_queue_size: Optional[int] = 100, buffer_size: Optional[int] = 65543,
                  key: Optional[Union[None, bytes]] = None, enable_multicast: Optional[bool] = False,
                  multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False,
-                 from_source: Optional[Union[int, str]] = None, run_new_process: Optional[bool] = True):
+                 from_source: Optional[Union[int, str]] = None, run_new_process: Optional[bool] = True,
+                 async_msg_generation: Optional[bool] = False):
         """Create a new VideoStream object with given parameter and run the process.
 
         :param role: Tell if the VideoStream is emitter or consumer.
@@ -75,12 +78,13 @@ class VideoStream():
         :param use_rcv_img_buffer: A bool that tell if received image are stored in a buffer or in a single variable.
         :param from_source: Make the VideoStream stream from a source.
         :param run_new_process: Specify if the Eye object must be run in a new process.
+        :param async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
         """
         self.internal_pipe, self.external_pipe = mp.Pipe()
         if role != VideoStream.EMITTER and role != VideoStream.CONSUMER:
             raise ValueError
         self.role = role
-        self.im: ImageManager = ImageManager(max_packet_size)
+        self.im: ImageManager = ImageManager(max_packet_size=max_packet_size, async_msg_generation=async_msg_generation)
         self.opened_topics: List[VideoTopic] = []
         self.udp_socket: Union[UDPSocket, None] = None
         self.socket_ip = socket_ip
@@ -101,6 +105,7 @@ class VideoStream():
         self.from_source = from_source
         self.eye: Union[None, Eye] = None
         self.run_new_process = run_new_process
+        self.async_msg_generation = async_msg_generation
         self.start()
 
     def start(self) -> NoReturn:
@@ -171,6 +176,7 @@ class VideoStream():
                                     multicast_ttl=self.multicast_ttl)
         self.udp_socket.start_socket()
         self.eye = None if self.from_source is None else Eye(src=self.from_source, run_new_process=False).start()
+        self.im = self.im.start()
 
     def _loop(self) -> NoReturn:
         """The main loop of the process."""
@@ -206,6 +212,8 @@ class VideoStream():
         """Stop the process and its UDPSocket."""
         self.is_running = False
         self.udp_socket.stop_socket()
+        if self.im.async_msg_generation is True:
+            self.im.stop()
         if self.eye is not None:
             self.eye.stop()
 
@@ -355,7 +363,12 @@ class ImageManager:
 
         Attributes :
             current_image : The current image to send.
+            _new_image : Specify if a new message has been received (used for async message processing).
+            _topic : A topic used for async message processing.
             max_packet_size : The max size of a packet (in byte).
+            async_msg_generation : Specify if the messages representing the image must be generated asynchronously.
+            messages : The asynchronously generated messages.
+            is_running : Specify if the associated Thread is running (used for async message processing).
 
     """
     NB_PACKET_SIZE = 4
@@ -366,25 +379,58 @@ class ImageManager:
     VIDEO_PACKET_ID = 210
     NB_MSG_HEADER = 0
 
-    def __init__(self, max_packet_size: Optional[int] = 5000) -> None:
+    def __init__(self, max_packet_size: Optional[int] = 5000, async_msg_generation=False) -> None:
         """Create a new ImageManager with given parameters.
 
         :param max_packet_size: The max size of a packet (in byte).
+        :param async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
         """
         self.current_image: np.array = np.array([])
-        self.max_packet_size = max_packet_size
+        self._new_image = False
+        self._topic = 0
+        self.max_packet_size: int = max_packet_size
+        self.async_msg_generation = async_msg_generation
+        self.messages: iter = iter([])
+        self.is_running = False
+
+    def start(self):
+        if self.async_msg_generation:
+            Thread(target=self._work, args=()).start()
+        return self
+
+    def _work(self):
+        self._setup()
+        self._loop()
+
+    def _setup(self):
+        self.is_running = True
+        self.messages = iter([])
+
+    def _loop(self):
+        while self.is_running and self.async_msg_generation:
+            if self._new_image is True:
+                self.messages = self.get_messages(self._topic, force=True)
+                self._topic += 1
+                self._new_image = False
+            else:
+                time.sleep(.001)
+
+    def stop(self):
+        self.is_running = False
 
     def refresh_image(self, new_image: np.array) -> NoReturn:
         """Replace current_image by new_image.
 
-        :param new_image:
+        :param new_image: The new image to process.
         """
         if len(new_image.shape) > 3 or len(new_image.shape) < 2 or (
                 len(new_image.shape) == 3 and new_image.shape[2] != 3):
             raise ValueError
         if new_image.dtype == np.uint8:
             self.current_image = new_image
-        self.current_image = new_image.astype(np.uint8)
+        else:
+            self.current_image = new_image.astype(np.uint8)
+        self._new_image = True
 
     def split_image(self) -> map:
         """Split current_image into bytes with a maximal length of max_packet_size.
@@ -424,12 +470,15 @@ class ImageManager:
         """
         return 3 if len(self.current_image.shape) == 3 else 1
 
-    def get_messages(self, topic: int) -> iter:
+    def get_messages(self, topic: int, force: Optional[bool] = False) -> iter:
         """Return a list of bytes representing the messages to send.
 
         :param topic: The topic associated to the image.
+        :param force: Specify if tje messages must be re-computed.
         :return messages: An iterator containing the the messages to send as bytes.
         """
+        if self.async_msg_generation and (force is False):
+            return self.messages
         img_split = self.split_image()
         to_msg = lambda enum: UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
                                          message_nb=enum[0] + 1).to_bytes()
@@ -443,38 +492,6 @@ class ImageManager:
                                              self.get_pixel_size())
         # return [header] + list(img_messages)
         return chain([header], img_messages)
-
-    def get_messages_express(self, img, topic):
-        header = UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, topic=topic, message_nb=ImageManager.NB_MSG_HEADER,
-                            payload=math.ceil(np.array(
-                                img.shape).prod() / self.max_packet_size).to_bytes(
-                                ImageManager.NB_PACKET_SIZE, 'little') + int(np.array(img).prod()).to_bytes(
-                                ImageManager.TOTAL_BYTES_SIZE, 'little') + img.shape[0].to_bytes(
-                                ImageManager.HEIGHT_SIZE,
-                                'little') + img.shape[1].to_bytes(
-                                ImageManager.LENGTH_SIZE, 'little') + (3 if len(img) == 3 else 1).to_bytes(
-                                ImageManager.SIZE_PIXEL_SIZE, 'little')).to_bytes()
-        img_split = map(lambda x: x.tobytes(), np.array_split(img.flatten(), math.ceil(np.array(
-            img.shape).prod() / self.max_packet_size)))
-        to_msg = lambda enum: UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
-                                         message_nb=enum[0] + 1).to_bytes()
-        img_messages = map(to_msg, enumerate(img_split))
-        return chain([header], img_messages)
-
-        # return chain(
-        #     [UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, topic=topic, message_nb=ImageManager.NB_MSG_HEADER,
-        #                 payload=math.ceil(np.array(
-        #                     img.shape).prod() / self.max_packet_size).to_bytes(
-        #                     ImageManager.NB_PACKET_SIZE, 'little') + int(np.array(img).prod()).to_bytes(
-        #                     ImageManager.TOTAL_BYTES_SIZE, 'little') + img.shape[0].to_bytes(
-        #                     ImageManager.HEIGHT_SIZE,
-        #                     'little') + img.shape[1].to_bytes(
-        #                     ImageManager.LENGTH_SIZE, 'little') + (3 if len(img) == 3 else 1).to_bytes(
-        #                     ImageManager.SIZE_PIXEL_SIZE, 'little')).to_bytes()],
-        #     map(lambda enum: UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
-        #                                 message_nb=enum[0] + 1).to_bytes(),
-        #         enumerate(map(lambda x: x.tobytes(), np.array_split(img.flatten(), math.ceil(np.array(
-        #             img.shape).prod() / self.max_packet_size))))))
 
 
 class VideoTopic:

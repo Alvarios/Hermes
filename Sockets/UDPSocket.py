@@ -74,8 +74,11 @@ class UDPSocket(Thread):
     def stop_socket(self) -> NoReturn:
         """Stop the listening thread."""
         self.is_running = False
-        self.socket.shutdown(socket.SHUT_RD)
-        self.socket.close()
+        try:
+            self.socket.shutdown(socket.SHUT_RD)
+            self.socket.close()
+        except:
+            pass
         self.join()
 
     def listen(self) -> NoReturn:
