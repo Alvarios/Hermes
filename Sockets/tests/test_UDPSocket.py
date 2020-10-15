@@ -91,9 +91,9 @@ def test_udp_socket_can_start_and_stop_its_thread():
 
     # When
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port)
-    udp_socket.start_socket()
+    udp_socket.start()
     time.sleep(.1)
-    udp_socket.stop_socket()
+    udp_socket.stop()
 
     # Then
     assert udp_socket.is_running is False
@@ -107,10 +107,10 @@ def test_socket_can_receive_message_while_running():
 
     # When
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port)
-    udp_socket.start_socket()
+    udp_socket.start()
     udp_socket.socket.sendto(msg, (socket_ip, socket_port))
     time.sleep(.1)
-    udp_socket.stop_socket()
+    udp_socket.stop()
 
     # Then
     assert len(udp_socket.queue) == 1
@@ -126,10 +126,10 @@ def test_socket_can_send_message_while_running():
 
     # When
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port)
-    udp_socket.start_socket()
+    udp_socket.start()
     udp_socket.sendto(msg, (socket_ip, socket_port))
     time.sleep(.1)
-    udp_socket.stop_socket()
+    udp_socket.stop()
 
     # Then
     assert len(udp_socket.queue) == 1
@@ -146,11 +146,11 @@ def test_socket_can_received_multiple_message_while_running():
 
     # When
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg)
-    udp_socket.start_socket()
+    udp_socket.start()
     for i in range(n_msg):
         udp_socket.sendto(msg, (socket_ip, socket_port))
     time.sleep(.1)
-    udp_socket.stop_socket()
+    udp_socket.stop()
 
     # Then
     assert len(udp_socket.queue) == n_msg
@@ -164,12 +164,12 @@ def test_pull_allow_to_get_first_message_in_the_queue():
 
     # When
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg)
-    udp_socket.start_socket()
+    udp_socket.start()
     udp_socket.sendto(bytes([0]), (socket_ip, socket_port))
     udp_socket.sendto(bytes([1]), (socket_ip, socket_port))
     time.sleep(.1)
     result = udp_socket.pull()
-    udp_socket.stop_socket()
+    udp_socket.stop()
 
     # Then
     assert result[0] == bytes([0])
@@ -254,14 +254,14 @@ def test_udp_socket_send_encrypted_messages_when_encryption_in_transit_set_to_tr
     test_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_socket = UDPSocket(key=key, socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg,
                            encryption_in_transit=True)
-    udp_socket.start_socket()
+    udp_socket.start()
 
     # When
     udp_socket.sendto(msg, (socket_ip, test_socket_port))
     rcv_msg = test_socket.recv(100)
     time.sleep(.1)
 
-    udp_socket.stop_socket()
+    udp_socket.stop()
     test_socket.shutdown(socket.SHUT_RD)
     test_socket.close()
 
@@ -277,13 +277,13 @@ def test_udp_socket_can_read_encrypted_messages_when_encryption_in_transit_set_t
     n_msg = 2
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg,
                            encryption_in_transit=True)
-    udp_socket.start_socket()
+    udp_socket.start()
 
     # When
     udp_socket.sendto(msg, (socket_ip, socket_port))
     time.sleep(.1)
 
-    udp_socket.stop_socket()
+    udp_socket.stop()
 
     # Then
     assert udp_socket.pull()[0] == msg
@@ -311,42 +311,42 @@ def test_new_udp_socket_correctly_set_multicast_ttl():
     assert udp_socket.multicast_ttl is multicast_ttl
 
 
-def test_send_to_correctly_send_message_to_multicast_group():
-    # Given
-    msg = b"test"
-
-    multicast_ttl = 2
-    socket_ip = "192.168.50.150"
-    socket_port = 50000
-    max_queue_size = 10
-
-    mcast_grp = '224.0.0.2'
-    mcast_port = 50001
-
-    udp_socket = UDPSocket(multicast_ttl=multicast_ttl, enable_multicast=True, socket_ip=socket_ip,
-                           socket_port=socket_port, max_queue_size=max_queue_size)
-
-    test_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    test_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    test_socket.bind(('', mcast_port))
-    mreq = struct.pack("4sL", socket.inet_aton(mcast_grp), socket.INADDR_ANY)
-    test_socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-
-    udp_socket.start_socket()
-
-    # When
-
-    time.sleep(.1)
-    udp_socket.sendto(msg, (mcast_grp, mcast_port))
-    time.sleep(.1)
-    # rcv_msg = test_socket.recv(1024)
-    # print(test_socket.recvfrom(1024))
-
-    udp_socket.stop_socket()
-    test_socket.shutdown(socket.SHUT_RD)
-    test_socket.close()
-
-    # Then
-    # print(rcv_msg)
-
-# python -m pytest -s -vv
+# def test_send_to_correctly_send_message_to_multicast_group():
+#     # Given
+#     msg = b"test"
+#
+#     multicast_ttl = 2
+#     socket_ip = "192.168.50.150"
+#     socket_port = 50000
+#     max_queue_size = 10
+#
+#     mcast_grp = '224.0.0.2'
+#     mcast_port = 50001
+#
+#     udp_socket = UDPSocket(multicast_ttl=multicast_ttl, enable_multicast=True, socket_ip=socket_ip,
+#                            socket_port=socket_port, max_queue_size=max_queue_size)
+#
+#     test_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+#     test_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+#     test_socket.bind(('', mcast_port))
+#     mreq = struct.pack("4sL", socket.inet_aton(mcast_grp), socket.INADDR_ANY)
+#     test_socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+#
+#     udp_socket.start_socket()
+#
+#     # When
+#
+#     time.sleep(.1)
+#     udp_socket.sendto(msg, (mcast_grp, mcast_port))
+#     time.sleep(.1)
+#     # rcv_msg = test_socket.recv(1024)
+#     # print(test_socket.recvfrom(1024))
+#
+#     udp_socket.stop_socket()
+#     test_socket.shutdown(socket.SHUT_RD)
+#     test_socket.close()
+#
+#     # Then
+#     # print(rcv_msg)
+#
+# # python -m pytest -s -vv

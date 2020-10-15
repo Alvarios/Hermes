@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Example of video streaming emitter.
+"""Example of video streaming emitter for raspberry.
 
 This script get the flux from the camera and send it to given ip and port.
 The consumer of this script can be the script video_stream_consumer.py
@@ -18,43 +18,10 @@ if __name__ == "__main__":
     emitter_address_port = (emitter_ip, int(emitter_port))
     consumer_address_port = (consumer_ip, int(consumer_port))
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
-                          socket_port=emitter_address_port[1])
-
+                          socket_port=emitter_address_port[1], run_new_process=False, encoding=1, compress_rate=50)
     eye = Eye(src=0, run_new_process=False).start()
-
     while emitter.get_is_running() is False:
         pass
-    red = np.array(480*[640*[[255,0,0]]]).astype(np.uint8)
-    green = np.array(480*[640*[[0,255,0]]]).astype(np.uint8)
     emitter.add_subscriber(consumer_address_port)
     while True:
-        #emitter.refresh_image(eye.read())
-        #eye.read()
-        emitter.refresh_image(green)
-        print("ok")
-        emitter.refresh_image(red)
-
-    emitter.stop()
-
-    # with picamera.PiCamera() as camera:
-    #     camera.resolution = (320, 240)
-    #     camera.framerate = 24
-    #     time.sleep(2)
-    #     output = np.empty((240, 320, 3), dtype=np.uint8)
-    #     camera.capture(output, 'rgb')
-    #
-    #     while emitter.get_is_running() is False:
-    #         pass
-    #     emitter.add_subscriber(consumer_address_port)
-    #     red = np.array(240*[320*[[255,0,0]]])
-    #     green = np.array(240*[320*[[0,255,0]]])
-    #     blue = np.array(240*[320*[[0,0,255]]])
-    #     while True:
-    #         camera.capture(output, 'rgb')
-    #         #output = np.array(240*[320*[[255,0,0]]])
-    #         emitter.refresh_image(red)
-    #         #output = np.array(240*[320*[[0,255,0]]])
-    #         emitter.refresh_image(green)
-    #         #output = np.array(240*[320*[[0,0,255]]])
-    #         emitter.refresh_image(blue)
-    #     emitter.stop()
+        emitter.refresh_image(eye.read())

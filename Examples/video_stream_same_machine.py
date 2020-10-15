@@ -14,7 +14,7 @@ if __name__ == "__main__":
     emitter_address_port = ('127.0.0.1', 50000)
     consumer_address_port = ('127.0.0.1', 50001)
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
-                          socket_port=emitter_address_port[1])
+                          socket_port=emitter_address_port[1], async_msg_generation=True, encoding=1, compress_rate=90)
     consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
                            socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000)
     while emitter.get_is_running() is False:
@@ -42,8 +42,6 @@ if __name__ == "__main__":
         if rcv_frame is not None:
             last_frame = rcv_frame
             cpt += 1
-            print(rcv_frame.shape)
-            print(rcv_frame.dtype)
         cv2.imshow("preview", last_frame)
 
         key = cv2.waitKey(20)
