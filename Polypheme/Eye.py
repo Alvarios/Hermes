@@ -39,7 +39,7 @@ class Eye:
         self.internal_pipe, self.external_pipe = mp.Pipe()
 
     def _work(self) -> NoReturn:
-        """Execute the setup and the ain loop of the class."""
+        """Execute the setup and the main loop of the class."""
         self._setup()
         self._loop()
 
@@ -122,26 +122,3 @@ class Eye:
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
-
-
-if __name__ == "__main__":
-
-    cv2.namedWindow("preview")
-
-    eye = Eye(src=0, run_new_process=True).start()
-
-    start = datetime.datetime.now()
-    cpt = 0
-
-    while True:
-        cv2.imshow("preview", eye.read())
-        cpt += 1
-        key = cv2.waitKey(20)
-        if key == 27:  # exit on ESC
-            break
-
-    stop = datetime.datetime.now()
-    dt = stop - start
-    print("Average IPS : ", cpt / dt.total_seconds())
-    cv2.destroyWindow("preview")
-    eye.stop()
