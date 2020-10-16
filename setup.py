@@ -35,7 +35,7 @@ with open(base_dir / 'README.md', encoding='utf-8') as f:
 
 setup(
     name="Hermes",
-    version="0.0.3",
+    version="0.0.4",
     author="CDulouard",
     author_email="clement.dulouard@alvarios.com",
     description="Network tools for python.",
@@ -51,6 +51,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
     ],
+    python_requires='>=3.6',
 )
 
 # python setup.py egg_info --egg-base=./

@@ -1,5 +1,5 @@
-from Stream.VideoStream import TopicManager, ImageManager, VideoTopic
-from Messages.UDPMessage import UDPMessage
+from hermes.streams.VideoStream import TopicManager, ImageManager, VideoTopic
+from hermes.messages.UDPMessage import UDPMessage
 import numpy as np
 import pytest
 import time

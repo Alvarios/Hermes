@@ -1,10 +1,9 @@
-from Sockets.UDPSocket import UDPSocket
+from hermes.sockets.UDPSocket import UDPSocket
 import collections
 import socket
 import time
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
-import struct
 
 
 def test_new_udp_socket_correctly_set_encryption_in_transit():

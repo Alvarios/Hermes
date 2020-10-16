@@ -5,9 +5,9 @@ This script get the flux from the camera and send it to given ip and port.
 The consumer of this script can be the script video_stream_consumer.py
 """
 
-from Stream.VideoStream import VideoStream
+from hermes.streams.VideoStream import VideoStream
 import cv2
-from Polypheme.Eye import Eye
+from hermes.polypheme.Eye import Eye
 
 if __name__ == "__main__":
     emitter_ip = input("Ip address of emitter : \n")

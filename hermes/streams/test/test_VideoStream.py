@@ -1,5 +1,5 @@
 import multiprocessing as mp
-from Stream.VideoStream import VideoStream, ImageManager
+from hermes.streams.VideoStream import VideoStream, ImageManager
 import numpy as np
 import pytest
 import time
@@ -180,4 +180,4 @@ def test_two_video_stream_can_transmit_images():
     emitter.stop()
     consumer.stop()
 
-# python -m pytest -s -vv Stream/test/test_VideoStream.py
+# python -m pytest -s -vv streams/test/test_VideoStream.py

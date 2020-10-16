@@ -1,4 +1,4 @@
-from Messages.UDPMessage import UDPMessage
+from hermes.messages.UDPMessage import UDPMessage
 import time
 import zlib
 import pytest

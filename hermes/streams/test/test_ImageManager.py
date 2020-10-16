@@ -1,8 +1,8 @@
-from Stream.VideoStream import ImageManager
+from hermes.streams.VideoStream import ImageManager
 import numpy as np
 import pytest
 import collections
-from Messages.UDPMessage import UDPMessage
+from hermes.messages.UDPMessage import UDPMessage
 
 
 def test_new_image_manager_correctly_setup_an_empty_numpy_array_for_image():
