@@ -16,7 +16,7 @@ if __name__ == "__main__":
     emitter_address_port = (emitter_ip, int(emitter_port))
     consumer_address_port = (consumer_ip, int(consumer_port))
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
-                          socket_port=emitter_address_port[1])
+                          socket_port=emitter_address_port[1]).start()
     while emitter.get_is_running() is False:
         pass
     emitter.add_subscriber(consumer_address_port)
