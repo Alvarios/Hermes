@@ -1,5 +1,5 @@
-from Stream.VideoStream import ImageManager, VideoTopic
-from Messages.UDPMessage import UDPMessage
+from hermes.streams.VideoStream import ImageManager, VideoTopic
+from hermes.messages.UDPMessage import UDPMessage
 from math import pow
 import pytest
 import collections

@@ -9,11 +9,11 @@ to ensure messages are read in correct order.
 import numpy as np
 from typing import Optional, NoReturn, List, Union, Tuple, Dict
 import math
-from Messages.UDPMessage import UDPMessage
-from Sockets.UDPSocket import UDPSocket
+from hermes.messages.UDPMessage import UDPMessage
+from hermes.sockets.UDPSocket import UDPSocket
 import multiprocessing as mp
 import time
-from Polypheme.Eye import Eye
+from hermes.polypheme.Eye import Eye
 from threading import Thread
 from itertools import chain
 import cv2
