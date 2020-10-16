@@ -4,12 +4,9 @@
 This module provides a socket for UDP communication.
 """
 from typing import NoReturn, Optional, List, Tuple, Any, Union
-# from gevent import socket
 import socket
 from threading import Thread
 from cryptography.fernet import Fernet
-# from gevent import monkey
-# monkey.patch_socket()
 
 
 class UDPSocket:
