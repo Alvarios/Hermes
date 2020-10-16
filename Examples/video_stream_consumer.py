@@ -12,11 +12,8 @@ import cv2
 import datetime
 
 if __name__ == "__main__":
-    emitter_ip = input("Ip address of emitter : \n")
-    emitter_port = input("Port of emitter : \n")
     consumer_ip = input("Ip address of consumer : \n")
     consumer_port = input("Port of consumer : \n")
-    emitter_address_port = (emitter_ip, int(emitter_port))
     consumer_address_port = (consumer_ip, int(consumer_port))
     consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
                            socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000)

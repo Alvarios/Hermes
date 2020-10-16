@@ -52,7 +52,7 @@ class VideoStream:
             run_new_process : Specify if the Eye object must be run in a new process.
             async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
             encoding: Define the encoding used to send images.
-            compress_rate: Define the compress rate of the image.
+            encoding_param : Parameters used to encode image. See cv2.imencode for more details.
     """
     EMITTER = "emitter"
     CONSUMER = "consumer"
@@ -65,7 +65,7 @@ class VideoStream:
                  multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False,
                  from_source: Optional[Union[int, str]] = None, run_new_process: Optional[bool] = True,
                  async_msg_generation: Optional[bool] = False, encoding: Optional[int] = 0,
-                 compress_rate: Optional[int] = 0):
+                 encoding_param: Optional[Union[dict, None]] = None):
         """Create a new VideoStream object with given parameter and run the process.
 
         :param role: Tell if the VideoStream is emitter or consumer.
@@ -83,14 +83,14 @@ class VideoStream:
         :param run_new_process: Specify if the Eye object must be run in a new process.
         :param async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
         :param encoding: Define the encoding used to send images.
-        :param compress_rate: Define the compress rate of the image.
+        :param encoding_param: Parameters used to encode image. See cv2.imencode for more details.
         """
         self.internal_pipe, self.external_pipe = mp.Pipe()
         if role != VideoStream.EMITTER and role != VideoStream.CONSUMER:
             raise ValueError
         self.role = role
         self.im: ImageManager = ImageManager(max_packet_size=max_packet_size, async_msg_generation=async_msg_generation,
-                                             encoding=encoding, compress_rate=compress_rate)
+                                             encoding=encoding, encoding_param=encoding_param)
         self.opened_topics: List[VideoTopic] = []
         self.udp_socket: Union[UDPSocket, None] = None
         self.socket_ip = socket_ip
@@ -113,7 +113,7 @@ class VideoStream:
         self.run_new_process = run_new_process
         self.async_msg_generation = async_msg_generation
         self.encoding = encoding
-        self.compress_rate = compress_rate
+        self.encoding_param = encoding_param if encoding_param is not None else {}
         self.start()
 
     def start(self) -> NoReturn:
@@ -382,8 +382,10 @@ class ImageManager:
             async_msg_generation : Specify if the messages representing the image must be generated asynchronously.
             messages : The asynchronously generated messages.
             is_running : Specify if the associated Thread is running (used for async message processing).
-            param encoding : Define the encoding used to send images.
-            param compress_rate : Define the compress rate of the image.
+            encoding : Define the encoding used to send images.
+            encoding_param: Parameters used to encode image. See cv2.imencode for more details.
+                Example for jpg encoding : encoding_param = {"params": [int(cv2.IMWRITE_JPEG_QUALITY), 50]} where 50
+                is the quality of the resulting image.
 
     """
     NB_PACKET_SIZE = 4
@@ -397,13 +399,13 @@ class ImageManager:
     ENCODING_DICT = {1: ".jpg"}
 
     def __init__(self, max_packet_size: Optional[int] = 5000, async_msg_generation: Optional[bool] = False,
-                 encoding: Optional[int] = 0, compress_rate: Optional[int] = 100) -> None:
+                 encoding: Optional[int] = 0, encoding_param: Optional[Union[dict, None]] = None) -> None:
         """Create a new ImageManager with given parameters.
 
         :param max_packet_size: The max size of a packet (in byte).
         :param async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
         :param encoding: Define the encoding used to send images.
-        :param compress_rate: Define the compress rate of the image.
+        :param encoding_param: Parameters used to encode image. See cv2.imencode for more details.
         """
         self.current_image: np.array = np.array([])
         self._new_image = False
@@ -413,22 +415,29 @@ class ImageManager:
         self.messages: iter = iter([])
         self.is_running = False
         self.encoding = encoding
-        self.compress_rate = compress_rate
+        self.encoding_param = encoding_param if encoding_param is not None else {}
 
     def start(self):
+        """Start a new thread if async_msg_generation is True.
+
+        :return image_manager: The current instance of the class.
+        """
         if self.async_msg_generation:
             Thread(target=self._work, args=()).start()
         return self
 
     def _work(self):
+        """Execute the setup and the main loop of the class."""
         self._setup()
         self._loop()
 
     def _setup(self):
+        """Setup function of the class."""
         self.is_running = True
         self.messages = iter([])
 
     def _loop(self):
+        """Main loop of the class"""
         while self.is_running and self.async_msg_generation:
             if self._new_image is True:
                 self.messages = self.get_messages(self._topic, force=True)
@@ -438,6 +447,7 @@ class ImageManager:
                 time.sleep(.001)
 
     def stop(self):
+        """Stop the thread of the instance of the class."""
         self.is_running = False
 
     def refresh_image(self, new_image: np.array) -> NoReturn:
@@ -465,8 +475,8 @@ class ImageManager:
             return map(lambda x: x.tobytes(), np.array_split(self.current_image.flatten(), math.ceil(np.array(
                 self.current_image.shape).prod() / self.max_packet_size)))
         if self.encoding in ImageManager.ENCODING_DICT.keys():
-            params = [int(cv2.IMWRITE_JPEG_QUALITY), self.compress_rate]
-            rslt, img = cv2.imencode(ImageManager.ENCODING_DICT[self.encoding], self.current_image, params)
+            result, img = cv2.imencode(ImageManager.ENCODING_DICT[self.encoding], self.current_image,
+                                       **self.encoding_param)
             return map(lambda x: x.tobytes(), np.array_split(img.flatten(), math.ceil(np.array(
                 self.current_image.shape).prod() / self.max_packet_size)))
 
@@ -512,14 +522,10 @@ class ImageManager:
         to_msg = lambda enum: UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
                                          message_nb=enum[0] + 1).to_bytes()
         img_messages = map(to_msg, enumerate(img_split))
-        # img_messages = [
-        #     UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=e, topic=topic, message_nb=i + 1).to_bytes() for
-        #     i, e in enumerate(img_split)]
         header = ImageManager.get_header_msg(topic, math.ceil(np.array(
             self.current_image.shape).prod() / self.max_packet_size), int(np.array(self.current_image.shape).prod()),
                                              self.current_image.shape[0], self.current_image.shape[1],
                                              self.get_pixel_size(), encoding=self.encoding)
-        # return [header] + list(img_messages)
         return chain([header], img_messages)
 
 
@@ -659,12 +665,8 @@ class VideoTopic:
                     (self.height, self.length, self.pixel_size)).astype(np.uint8)
             except:
                 return None
-            # return np.concatenate([list(i.payload) for i in self.rcv_messages]).reshape((self.height, self.length,
-            #                                                                              self.pixel_size)).astype(
-            #     np.uint8)
         return np.concatenate([np.frombuffer(i.payload, np.uint8) for i in self.rcv_messages]).reshape(
             (self.height, self.length)).astype(np.uint8)
-        # python -m pytest -s -vv
 
     @staticmethod
     def from_message(new_msg: UDPMessage):
@@ -739,7 +741,7 @@ class TopicManager:
             self.open_topic[topic].add_message(new_message)
             self.check_topic(topic)
         else:
-            self.dead_letter_queue.append(new_message)
+            self.put_dlq(new_message)
 
     def topic_exist(self, topic_num: int) -> bool:
         """Check if a given topic exist.
@@ -750,6 +752,11 @@ class TopicManager:
         """
         return topic_num in self.open_topic.keys()
 
+    def put_dlq(self, msg: UDPMessage) -> NoReturn:
+        """Put a new message in the dead letter queue."""
+        if type(msg) is UDPMessage:
+            self.dead_letter_queue.append(msg)
+
     def process_dlq(self, new_topic: int) -> NoReturn:
         """Read messages in the dlq, add messages to an existing topic if possible and delete outdated ones.
 
@@ -758,8 +765,7 @@ class TopicManager:
         new_topic_time: int = self.open_topic[new_topic].time_creation
         remaining_messages = []
         for msg in self.dead_letter_queue:
-            if type(msg) is list:
-                #print("WTF?!!")
+            if type(msg) is not UDPMessage:
                 continue
             if int.from_bytes(msg.topic, 'little') in self.open_topic.keys():
                 self.add_message(msg)
@@ -790,33 +796,3 @@ class TopicManager:
         """
         if self.in_waiting():
             return self.img_queue.pop(0)
-
-
-if __name__ == "__main__":
-    import cv2
-
-    emitter_address_port = ('127.0.0.1', 50000)
-    consumer_address_port = ('127.0.0.1', 50001)
-    emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
-                          socket_port=emitter_address_port[1], from_source=0)
-    consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
-                           socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000)
-    while emitter.get_is_running() is False:
-        pass
-    while consumer.get_is_running() is False:
-        pass
-    emitter.add_subscriber(consumer_address_port)
-    last_frame = None
-
-    cv2.namedWindow("preview")
-    cv2.imshow("preview", np.array(480 * [640 * [[255, 0, 0]]]).astype(np.uint8))
-    while True:
-        rcv_frame = consumer.get_rcv_img()
-        if rcv_frame is not None:
-            cv2.imshow("preview", rcv_frame)
-        key = cv2.waitKey(20)
-        if key == 27:  # exit on ESC
-            break
-    cv2.destroyWindow("preview")
-    # emitter.stop()
-    # consumer.stop()
