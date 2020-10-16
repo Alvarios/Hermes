@@ -11,10 +11,12 @@ import cv2
 import datetime
 
 if __name__ == "__main__":
+    encoding_param = {"params": [int(cv2.IMWRITE_JPEG_QUALITY), 50]}
     emitter_address_port = ('127.0.0.1', 50000)
     consumer_address_port = ('127.0.0.1', 50001)
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
-                          socket_port=emitter_address_port[1], async_msg_generation=True, encoding=1, compress_rate=90)
+                          socket_port=emitter_address_port[1], async_msg_generation=True, encoding=1,
+                          encoding_param=encoding_param)
     consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
                            socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000)
     while emitter.get_is_running() is False:
