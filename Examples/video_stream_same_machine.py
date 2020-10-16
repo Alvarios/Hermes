@@ -16,9 +16,9 @@ if __name__ == "__main__":
     consumer_address_port = ('127.0.0.1', 50001)
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
                           socket_port=emitter_address_port[1], async_msg_generation=True, encoding=1,
-                          encoding_param=encoding_param)
+                          encoding_param=encoding_param).start()
     consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
-                           socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000)
+                           socket_port=consumer_address_port[1], use_rcv_img_buffer=False, max_queue_size=10000).start()
     while emitter.get_is_running() is False:
         pass
     while consumer.get_is_running() is False:

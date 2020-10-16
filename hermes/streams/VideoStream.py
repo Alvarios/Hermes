@@ -114,7 +114,6 @@ class VideoStream:
         self.async_msg_generation = async_msg_generation
         self.encoding = encoding
         self.encoding_param = encoding_param if encoding_param is not None else {}
-        self.start()
 
     def start(self) -> NoReturn:
         """Start a new thread or a new process for asynchronous camera reading.

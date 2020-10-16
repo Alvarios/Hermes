@@ -19,7 +19,7 @@ if __name__ == "__main__":
     consumer_address_port = (consumer_ip, int(consumer_port))
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
                           socket_port=emitter_address_port[1], run_new_process=False, encoding=1,
-                          encoding_param=encoding_param)
+                          encoding_param=encoding_param).start()
     eye = Eye(src=0, run_new_process=False).start()
     while emitter.get_is_running() is False:
         pass
