@@ -11,10 +11,12 @@ def test_new_udp_socket_correctly_set_encryption_in_transit():
     encryption_in_transit = False
 
     # When
-    udp_socket = UDPSocket(encryption_in_transit=encryption_in_transit)
+    udp_socket = UDPSocket(encryption_in_transit=encryption_in_transit).start()
 
     # Then
     assert udp_socket.encryption_in_transit is encryption_in_transit
+
+    udp_socket.stop()
 
 
 def test_new_udp_socket_correctly_set_buffer_size():
@@ -22,10 +24,11 @@ def test_new_udp_socket_correctly_set_buffer_size():
     buffer_size = 1024
 
     # When
-    udp_socket = UDPSocket(buffer_size=buffer_size)
+    udp_socket = UDPSocket(buffer_size=buffer_size).start()
 
     # Then
     assert udp_socket.buffer_size == buffer_size
+    udp_socket.stop()
 
 
 def test_new_udp_socket_correctly_set_socket_ip():
@@ -33,10 +36,11 @@ def test_new_udp_socket_correctly_set_socket_ip():
     socket_ip = "127.0.0.1"
 
     # When
-    udp_socket = UDPSocket(socket_ip=socket_ip)
+    udp_socket = UDPSocket(socket_ip=socket_ip).start()
 
     # Then
     assert udp_socket.socket_ip == socket_ip
+    udp_socket.stop()
 
 
 def test_new_udp_socket_correctly_set_socket_port():
@@ -44,10 +48,11 @@ def test_new_udp_socket_correctly_set_socket_port():
     socket_port = 50000
 
     # When
-    udp_socket = UDPSocket(socket_port=socket_port)
+    udp_socket = UDPSocket(socket_port=socket_port).start()
 
     # Then
     assert udp_socket.socket_port == socket_port
+    udp_socket.stop()
 
 
 def test_new_udp_socket_correctly_set_max_queue_size():
@@ -55,32 +60,35 @@ def test_new_udp_socket_correctly_set_max_queue_size():
     max_queue_size = 1000
 
     # When
-    udp_socket = UDPSocket(max_queue_size=max_queue_size)
+    udp_socket = UDPSocket(max_queue_size=max_queue_size).start()
 
     # Then
     assert udp_socket.max_queue_size == max_queue_size
+    udp_socket.stop()
 
 
 def test_new_udp_socket_correctly_setup_an_empty_queue():
     # Given
 
     # When
-    udp_socket = UDPSocket()
+    udp_socket = UDPSocket().start()
 
     # Then
     assert collections.Counter(udp_socket.queue) == collections.Counter([])
+    udp_socket.stop()
 
 
 def test_new_udp_socket_correctly_setup_a_socket_using_udp_protocol():
     # Given
 
     # When
-    udp_socket = UDPSocket()
+    udp_socket = UDPSocket().start()
 
     # Then
     assert udp_socket.socket.type == socket.SocketKind.SOCK_DGRAM
     assert udp_socket.socket.family == socket.AddressFamily.AF_INET
     assert udp_socket.socket.proto == socket.IPPROTO_UDP
+    udp_socket.stop()
 
 
 def test_udp_socket_can_start_and_stop_its_thread():
@@ -89,13 +97,13 @@ def test_udp_socket_can_start_and_stop_its_thread():
     socket_port = 50000
 
     # When
-    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port)
-    udp_socket.start()
-    time.sleep(.1)
+    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port).start()
     udp_socket.stop()
+    time.sleep(.1)
 
     # Then
     assert udp_socket.is_running is False
+
 
 
 def test_socket_can_receive_message_while_running():
@@ -105,16 +113,15 @@ def test_socket_can_receive_message_while_running():
     msg = str.encode("test", "utf8")
 
     # When
-    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port)
-    udp_socket.start()
+    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port).start()
     udp_socket.socket.sendto(msg, (socket_ip, socket_port))
     time.sleep(.1)
-    udp_socket.stop()
 
     # Then
     assert len(udp_socket.queue) == 1
     assert udp_socket.queue[0][1] == (socket_ip, socket_port)
     assert udp_socket.queue[0][0] == msg
+    udp_socket.stop()
 
 
 def test_socket_can_send_message_while_running():
@@ -124,16 +131,15 @@ def test_socket_can_send_message_while_running():
     msg = str.encode("test", "utf8")
 
     # When
-    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port)
-    udp_socket.start()
+    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port).start()
     udp_socket.sendto(msg, (socket_ip, socket_port))
     time.sleep(.1)
-    udp_socket.stop()
 
     # Then
     assert len(udp_socket.queue) == 1
     assert udp_socket.queue[0][1] == (socket_ip, socket_port)
     assert udp_socket.queue[0][0] == msg
+    udp_socket.stop()
 
 
 def test_socket_can_received_multiple_message_while_running():
@@ -144,8 +150,7 @@ def test_socket_can_received_multiple_message_while_running():
     n_msg = 10
 
     # When
-    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg)
-    udp_socket.start()
+    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg).start()
     for i in range(n_msg):
         udp_socket.sendto(msg, (socket_ip, socket_port))
     time.sleep(.1)
@@ -162,17 +167,16 @@ def test_pull_allow_to_get_first_message_in_the_queue():
     n_msg = 2
 
     # When
-    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg)
-    udp_socket.start()
+    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg).start()
     udp_socket.sendto(bytes([0]), (socket_ip, socket_port))
     udp_socket.sendto(bytes([1]), (socket_ip, socket_port))
     time.sleep(.1)
     result = udp_socket.pull()
-    udp_socket.stop()
 
     # Then
     assert result[0] == bytes([0])
     assert len(udp_socket.queue) == 1
+    udp_socket.stop()
 
 
 def test_new_udp_socket_correctly_set_encryption_key():
@@ -180,20 +184,22 @@ def test_new_udp_socket_correctly_set_encryption_key():
     key = Fernet.generate_key()
 
     # When
-    udp_socket = UDPSocket(key=key)
+    udp_socket = UDPSocket(key=key).start()
 
     # Then
     assert udp_socket.key == key
+    udp_socket.stop()
 
 
 def test_key_is_not_none_when_no_value_is_given():
     # Given
 
     # When
-    udp_socket = UDPSocket()
+    udp_socket = UDPSocket().start()
 
     # Then
     assert udp_socket.key is not None
+    udp_socket.stop()
 
 
 def test_new_socket_creates_a_fernet_encoder():
@@ -201,11 +207,12 @@ def test_new_socket_creates_a_fernet_encoder():
     key = Fernet.generate_key()
 
     # When
-    udp_socket = UDPSocket(key=key)
+    udp_socket = UDPSocket(key=key).start()
 
     # Then
     assert udp_socket.fernet_encoder is not None
     assert type(udp_socket.fernet_encoder) is Fernet
+    udp_socket.stop()
 
 
 def test_change_key_correctly_change_the_key():
@@ -214,11 +221,12 @@ def test_change_key_correctly_change_the_key():
     key_new = Fernet.generate_key()
 
     # When
-    udp_socket = UDPSocket(key=key_old)
+    udp_socket = UDPSocket(key=key_old).start()
     udp_socket.change_key(key_new)
 
     # Then
     assert udp_socket.key == key_new
+    udp_socket.stop()
 
 
 def test_change_key_correctly_change_the_fernet_encoder():
@@ -228,7 +236,7 @@ def test_change_key_correctly_change_the_fernet_encoder():
     msg = b"test"
 
     # When
-    udp_socket = UDPSocket(key=key_old)
+    udp_socket = UDPSocket(key=key_old).start()
     msg_crypt = udp_socket.fernet_encoder.encrypt(msg)
     msg_decrypt_old = udp_socket.fernet_encoder.decrypt(msg_crypt)
     udp_socket.change_key(key_new)
@@ -237,6 +245,7 @@ def test_change_key_correctly_change_the_fernet_encoder():
     assert msg_decrypt_old == msg
     with pytest.raises(InvalidToken):
         udp_socket.fernet_encoder.decrypt(msg_crypt)
+    udp_socket.stop()
 
 
 def test_udp_socket_send_encrypted_messages_when_encryption_in_transit_set_to_true():
@@ -252,8 +261,7 @@ def test_udp_socket_send_encrypted_messages_when_encryption_in_transit_set_to_tr
     test_socket.bind((socket_ip, test_socket_port))
     test_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_socket = UDPSocket(key=key, socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg,
-                           encryption_in_transit=True)
-    udp_socket.start()
+                           encryption_in_transit=True).start()
 
     # When
     udp_socket.sendto(msg, (socket_ip, test_socket_port))
@@ -275,8 +283,7 @@ def test_udp_socket_can_read_encrypted_messages_when_encryption_in_transit_set_t
     socket_port = 50000
     n_msg = 2
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg,
-                           encryption_in_transit=True)
-    udp_socket.start()
+                           encryption_in_transit=True).start()
 
     # When
     udp_socket.sendto(msg, (socket_ip, socket_port))
@@ -293,10 +300,11 @@ def test_new_udp_socket_correctly_set_enable_multicast():
     enable_multicast = True
 
     # When
-    udp_socket = UDPSocket(enable_multicast=enable_multicast)
+    udp_socket = UDPSocket(enable_multicast=enable_multicast).start()
 
     # Then
     assert udp_socket.enable_multicast is enable_multicast
+    udp_socket.stop()
 
 
 def test_new_udp_socket_correctly_set_multicast_ttl():
@@ -304,11 +312,11 @@ def test_new_udp_socket_correctly_set_multicast_ttl():
     multicast_ttl = 3
 
     # When
-    udp_socket = UDPSocket(multicast_ttl=multicast_ttl)
+    udp_socket = UDPSocket(multicast_ttl=multicast_ttl).start()
 
     # Then
     assert udp_socket.multicast_ttl is multicast_ttl
-
+    udp_socket.stop()
 
 # def test_send_to_correctly_send_message_to_multicast_group():
 #     # Given
@@ -348,4 +356,4 @@ def test_new_udp_socket_correctly_set_multicast_ttl():
 #     # Then
 #     # print(rcv_msg)
 #
-# # python -m pytest -s -vv
+# # python -m pytest -s -vv hermes/sockets

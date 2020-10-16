@@ -29,7 +29,7 @@ class Eye:
         """Create a new Eye instance.
 
         :param src: The video source used for VideoCapture.
-        :param run_new_process: Specify if the Eye object must be run in a new process.
+        :param run_new_process: Specify if the Eye instance must be run in a new process.
         """
         self.vc = cv2.VideoCapture(src)
         (self.rval, self.frame) = self.vc.read()
@@ -66,7 +66,7 @@ class Eye:
         if self.run_new_process is False:
             self._start()
         else:
-            mp.Process(target=self._start()).start()
+            mp.Process(target=self._start).start()
         return self
 
     def _start(self) -> NoReturn:
