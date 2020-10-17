@@ -105,7 +105,6 @@ def test_udp_socket_can_start_and_stop_its_thread():
     assert udp_socket.is_running is False
 
 
-
 def test_socket_can_receive_message_while_running():
     # Given
     socket_ip = "127.0.0.1"
@@ -317,6 +316,25 @@ def test_new_udp_socket_correctly_set_multicast_ttl():
     # Then
     assert udp_socket.multicast_ttl is multicast_ttl
     udp_socket.stop()
+
+
+def test_udp_socket_can_read_unencrypted_messages_when_encryption_in_transit_set_to_true():
+    # Given
+    msg = b"test"
+    socket_ip = "127.0.0.1"
+    socket_port = 50000
+    n_msg = 2
+    udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg,
+                           encryption_in_transit=True).start()
+
+    # When
+    udp_socket.sendto(msg, (socket_ip, socket_port), skip_encryption=True)
+    time.sleep(.1)
+
+    udp_socket.stop()
+
+    # Then
+    assert udp_socket.pull()[0] == msg
 
 # def test_send_to_correctly_send_message_to_multicast_group():
 #     # Given
