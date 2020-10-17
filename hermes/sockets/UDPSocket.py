@@ -7,7 +7,8 @@ import time
 from typing import NoReturn, Optional, List, Tuple, Any, Union
 import socket
 from threading import Thread
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
+
 import multiprocessing as mp
 
 
@@ -143,33 +144,43 @@ class UDPSocket:
                 if len(self.queue) >= self.max_queue_size:
                     raise BufferError
                 if self.encryption_in_transit:
-                    rcv_msg = (self.fernet_encoder.decrypt(rcv_msg[0]), rcv_msg[1])
+                    try:
+                        rcv_msg = (self.fernet_encoder.decrypt(rcv_msg[0]), rcv_msg[1])
+                    except InvalidToken:
+                        pass
                 self.queue.append(rcv_msg)
             except OSError:
                 pass
 
     def sendto(self, msg: Optional[bytes] = bytes,
-               address_port: Optional[Union[Tuple[str, int], None]] = None) -> NoReturn:
+               address_port: Optional[Union[Tuple[str, int], None]] = None,
+               skip_encryption: Optional[bool] = False) -> NoReturn:
         """Call to _sendto.
 
         :param msg: The data to send.
         :param address_port: A tuple of ip address and port of the target network endpoint.
+        :param skip_encryption: If encryption_in_transit is set, skip_encryption will disable the encryption for
+                                this message.
         """
         if self.run_new_process is False:
-            return self._sendto(msg=msg, address_port=address_port)
-        self.external_pipe.send((UDPSocket._sendto, {"msg": msg, "address_port": address_port}))
+            return self._sendto(msg=msg, address_port=address_port, skip_encryption=skip_encryption)
+        self.external_pipe.send(
+            (UDPSocket._sendto, {"msg": msg, "address_port": address_port, "skip_encryption": skip_encryption}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
 
     def _sendto(self, msg: Optional[bytes] = bytes,
-                address_port: Optional[Union[Tuple[str, int], None]] = None) -> NoReturn:
+                address_port: Optional[Union[Tuple[str, int], None]] = None,
+                skip_encryption: Optional[bool] = False) -> NoReturn:
         """Send a message to given network endpoint.
 
         :param msg: The data to send.
         :param address_port: A tuple of ip address and port of the target network endpoint.
+        :param skip_encryption: If encryption_in_transit is set, skip_encryption will disable the encryption for
+                                this message.
         """
-        if self.encryption_in_transit:
+        if self.encryption_in_transit and (not skip_encryption):
             msg = self.fernet_encoder.encrypt(msg)
         try:
             self.socket.sendto(msg, address_port)
@@ -222,3 +233,14 @@ class UDPSocket:
         self.key = new_key
         self.fernet_encoder = Fernet(self.key)
 
+
+if __name__ == "__main__":
+    key = Fernet.generate_key()
+    encoder = Fernet(key)
+    msg = "test".encode("utf8")
+    encrypt = encoder.encrypt(msg)
+    print(encoder.decrypt(encrypt))
+    try:
+        print(encoder.decrypt(msg))
+    except InvalidToken:
+        print(msg)
