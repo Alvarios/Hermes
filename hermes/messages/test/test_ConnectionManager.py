@@ -53,7 +53,7 @@ def test_new_connection_manager_is_created_with_a_new_rsa_key():
     cm = ConnectionManager()
 
     # Then
-    assert isinstance(cm.rsa_key, expected_type)
+    assert isinstance(cm._rsa_key, expected_type)
 
 
 def test_next_message_returns_correct_message_when_connection_request_begins_and_cm_is_client():
@@ -101,8 +101,8 @@ def test_next_message_returns_a_message_with_the_public_key_when_cm_is_server_an
     role = ConnectionManager.SERVER
     cm = ConnectionManager(role=role)
     cm._send_public_key = True
-    expected_payload = cm.rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                            format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    expected_payload = cm._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                             format=serialization.PublicFormat.SubjectPublicKeyInfo)
 
     # When
     result = cm.next_message()
@@ -117,7 +117,7 @@ def test_add_message_correctly_set_remote_host_key_when_a_public_key_is_received
     # Given
     role = ConnectionManager.CLIENT
     cm = ConnectionManager(role=role)
-    expected_value = cm.rsa_key.public_key()
+    expected_value = cm._rsa_key.public_key()
 
     cm._send_public_key = True
 
@@ -133,13 +133,157 @@ def test_add_message_correctly_set_remote_host_key_when_a_public_key_is_received
             SubjectPublicKeyInfo)
 
 
-def test_get_random_number_return_an_int_with_correct_size():
+def test_get_random_bytes_return_bytes_with_correct_length():
     # Given
-    pass
+    length = 50
+
     # When
-    result = ConnectionManager.get_random_number()
+    result = ConnectionManager.get_random_bytes(length)
 
     # Then
-    assert result.dtype == ConnectionManager.RANDOM_NUMBER_TYPE
+    assert type(result) is bytes
+    assert len(result) == length
 
-    # python -m pytest -s hermes/messages/test/test_ConnectionManager.py
+
+def test_get_password_message_correctly_return_a_udp_message_with_hash_pass():
+    # Given
+    password = b"test"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(password)
+    hash_pass = digest.finalize()
+    cm = ConnectionManager(hash_pass=hash_pass)
+
+    # When
+    result = cm.get_password_message()
+
+    # Then
+    assert result.payload[ConnectionManager.RANDOM_NUMBER_LEN:] == hash_pass
+
+
+def test_next_message_return_password_message_when_remote_host_key_is_not_none():
+    # Given
+    password = b"test"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(password)
+    hash_pass = digest.finalize()
+    role = ConnectionManager.CLIENT
+    cm = ConnectionManager(role=role, hash_pass=hash_pass)
+    cm._remote_host_key = cm._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                format=serialization.PublicFormat.SubjectPublicKeyInfo)
+
+    # When
+    result = cm.next_message()
+    result = cm._rsa_key.decrypt(result, ConnectionManager.RSA_PADDING)
+    result = UDPMessage.from_bytes(result)
+
+    # Then
+    assert result.payload[ConnectionManager.RANDOM_NUMBER_LEN:] == hash_pass
+
+
+def test_add_message_accept_connection_when_hash_pass_is_correct():
+    # Given
+    password = b"test"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(password)
+    hash_pass = digest.finalize()
+
+    client = ConnectionManager(role=ConnectionManager.CLIENT, hash_pass=hash_pass)
+    client._remote_host_key = client._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                        format=serialization.PublicFormat.
+                                                                        SubjectPublicKeyInfo)
+    server = ConnectionManager(role=ConnectionManager.SERVER, hash_pass=hash_pass)
+
+    # When
+    msg = client.next_message()
+    msg = client._rsa_key.decrypt(msg, ConnectionManager.RSA_PADDING)
+    msg = UDPMessage.from_bytes(msg)
+    server.add_message(msg)
+
+    # Then
+    assert server._password_correct is True
+
+
+def test_add_message_reject_connection_when_hash_pass_is_incorrect():
+    # Given
+    password_client = b"incorrect"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(password_client)
+    hash_pass_client = digest.finalize()
+
+    password_server = b"test"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(password_server)
+    hash_pass_server = digest.finalize()
+
+    client = ConnectionManager(role=ConnectionManager.CLIENT, hash_pass=hash_pass_client)
+    client._remote_host_key = client._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                        format=serialization.PublicFormat.
+                                                                        SubjectPublicKeyInfo)
+
+    server = ConnectionManager(role=ConnectionManager.SERVER, hash_pass=hash_pass_server)
+
+    # When
+    msg = client.next_message()
+    msg = client._rsa_key.decrypt(msg, ConnectionManager.RSA_PADDING)
+    msg = UDPMessage.from_bytes(msg)
+    server.add_message(msg)
+
+    # Then
+    assert server._password_correct is False
+
+
+def test_next_message_is_end_connection_when_given_password_is_incorrect():
+    # Given
+    password_client = b"incorrect"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(password_client)
+    hash_pass_client = digest.finalize()
+
+    password_server = b"test"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(password_server)
+    hash_pass_server = digest.finalize()
+
+    client = ConnectionManager(role=ConnectionManager.CLIENT, hash_pass=hash_pass_client)
+    client._remote_host_key = client._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                        format=serialization.PublicFormat.
+                                                                        SubjectPublicKeyInfo)
+
+    server = ConnectionManager(role=ConnectionManager.SERVER, hash_pass=hash_pass_server)
+    msg = client.next_message()
+    msg = client._rsa_key.decrypt(msg, ConnectionManager.RSA_PADDING)
+    msg = UDPMessage.from_bytes(msg)
+    server.add_message(msg)
+
+    # When
+    result = server.next_message()
+
+    # Then
+    assert int.from_bytes(result.msg_id, 'little') == ConnectionManager.END_CONNECTION_ID
+
+
+def test_next_message_is_get_public_key_when_given_password_is_correct():
+    # Given
+    password = b"test"
+    digest = hashes.Hash(hashes.SHA256())
+    digest.update(password)
+    hash_pass = digest.finalize()
+
+    client = ConnectionManager(role=ConnectionManager.CLIENT, hash_pass=hash_pass)
+    client._remote_host_key = client._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                        format=serialization.PublicFormat.
+                                                                        SubjectPublicKeyInfo)
+    server = ConnectionManager(role=ConnectionManager.SERVER, hash_pass=hash_pass)
+
+    msg = client.next_message()
+    msg = client._rsa_key.decrypt(msg, ConnectionManager.RSA_PADDING)
+    msg = UDPMessage.from_bytes(msg)
+    server.add_message(msg)
+
+    # When
+    result = server.next_message()
+
+    # Then
+    assert int.from_bytes(result.msg_id, 'little') == ConnectionManager.GET_PUBLIC_KEY_ID
+
+# python -m pytest -s hermes/messages/test/test_ConnectionManager.py

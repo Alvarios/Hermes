@@ -16,11 +16,8 @@ print(tst)
 
 msg = "hello, world".encode("utf8")
 
-encoded_msg = tst.encrypt(msg, padding.OAEP(
-    mgf=padding.MGF1(algorithm=hashes.SHA256()),
-    algorithm=hashes.SHA256(),
-    label=None
-))
+encoded_msg = tst.encrypt(msg, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(),
+                                            label=None))
 
 print(encoded_msg)
 
