@@ -232,15 +232,3 @@ class UDPSocket:
         """
         self.key = new_key
         self.fernet_encoder = Fernet(self.key)
-
-
-if __name__ == "__main__":
-    key = Fernet.generate_key()
-    encoder = Fernet(key)
-    msg = "test".encode("utf8")
-    encrypt = encoder.encrypt(msg)
-    print(encoder.decrypt(encrypt))
-    try:
-        print(encoder.decrypt(msg))
-    except InvalidToken:
-        print(msg)
