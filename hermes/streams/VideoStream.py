@@ -66,7 +66,7 @@ class VideoStream:
                  from_source: Optional[Union[int, str]] = None, run_new_process: Optional[bool] = True,
                  async_msg_generation: Optional[bool] = False, encoding: Optional[int] = 0,
                  encoding_param: Optional[Union[dict, None]] = None):
-        """Create a new VideoStream object with given parameter and run the process.
+        """Create a new VideoStream object with given parameter.
 
         :param role: Tell if the VideoStream is emitter or consumer.
         :param max_packet_size: The max size of a packet (in byte).

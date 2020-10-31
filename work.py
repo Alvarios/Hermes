@@ -20,6 +20,7 @@ encoded_msg = tst.encrypt(msg, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SH
                                             label=None))
 
 print(encoded_msg)
+print(len(encoded_msg))
 
 plaintext = key.decrypt(
     encoded_msg,
