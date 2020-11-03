@@ -1,4 +1,4 @@
-from hermes.sockets.UDPSocket import UDPSocket
+from hermes.network.UDPSocket import UDPSocket
 import collections
 import socket
 import time
@@ -336,42 +336,4 @@ def test_udp_socket_can_read_unencrypted_messages_when_encryption_in_transit_set
     # Then
     assert udp_socket.pull()[0] == msg
 
-# def test_send_to_correctly_send_message_to_multicast_group():
-#     # Given
-#     msg = b"test"
-#
-#     multicast_ttl = 2
-#     socket_ip = "192.168.50.150"
-#     socket_port = 50000
-#     max_queue_size = 10
-#
-#     mcast_grp = '224.0.0.2'
-#     mcast_port = 50001
-#
-#     udp_socket = UDPSocket(multicast_ttl=multicast_ttl, enable_multicast=True, socket_ip=socket_ip,
-#                            socket_port=socket_port, max_queue_size=max_queue_size)
-#
-#     test_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-#     test_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-#     test_socket.bind(('', mcast_port))
-#     mreq = struct.pack("4sL", socket.inet_aton(mcast_grp), socket.INADDR_ANY)
-#     test_socket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-#
-#     udp_socket.start_socket()
-#
-#     # When
-#
-#     time.sleep(.1)
-#     udp_socket.sendto(msg, (mcast_grp, mcast_port))
-#     time.sleep(.1)
-#     # rcv_msg = test_socket.recv(1024)
-#     # print(test_socket.recvfrom(1024))
-#
-#     udp_socket.stop_socket()
-#     test_socket.shutdown(socket.SHUT_RD)
-#     test_socket.close()
-#
-#     # Then
-#     # print(rcv_msg)
-#
 # # python -m pytest -s -vv hermes/sockets
