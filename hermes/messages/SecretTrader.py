@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Implementation of a secret trader for secure key exchanges.
+"""Implementation of a secret trader for secure secret exchanges.
 
     Copyright (C) 2020  Clement Dulouard
 
@@ -40,7 +40,19 @@ import numpy as np
 
 
 class SecretTrader:
-    """A class that manage secure key exchanges between a server and a client.
+    """A class can manage secret exchange between two instances of this class, one with a role of server
+    the other one with the role of client. It is designed to exchange symmetric encryption key but can be
+    used to exchange any secret.
+
+        The communication between client and server work as following :
+
+            Step 1 : Client ask server's public key
+            Step 2 : Server send its public key to server.
+            Step 3 Client send hashed password encrypted with server public key to server
+            Step 4 (if password incorrect) : Server send end connection message to client.
+            Step 4 (if password correct) : Server ask client's public key.
+            Step 5 : Client send its public key to server.
+            Step 7 : Server send its secret encrypted with client's public key to client.
 
         Constants :
             SERVER : Value that tell the SecretTrader role is server.
@@ -75,9 +87,6 @@ class SecretTrader:
     def __init__(self, role: Optional[str] = SERVER, hash_pass: Optional[Union[None, bytes]] = None,
                  secret: Optional[Union[None, bytes]] = None) -> None:
         """Create a new SecretTrader object with given parameter.
-
-        This class can manage _secret exchange between two instances of this class, one with a role of server
-        the other one with the role of client.
 
         :param role: The role of the current SecretTrader (client or server).
         :param hash_pass: The password as bytes needed for encryption key request.

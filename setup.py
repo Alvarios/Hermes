@@ -26,6 +26,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
         "Development Status :: 3 - Alpha"
     ],
+    license="GNU General Public License v3 (GPLv3)",
     python_requires='>=3.6',
 )
 

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Implementation of a general message that can be used for UDP communication.
 
-
     Copyright (C) 2020  Clement Dulouard
 
     This program is free software: you can redistribute it and/or modify
@@ -120,7 +119,7 @@ class UDPMessage:
         self.crc = zlib.crc32(self.full_content).to_bytes(UDPMessage.CRC_LENGTH, 'little')
 
     def check_crc(self) -> bool:
-        """Return True if crc is correct else False
+        """Return True if crc is correct else False.
 
         :return crc_correct: The result of crc check.
         """
