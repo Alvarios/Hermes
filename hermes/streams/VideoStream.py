@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Implementation utils that can be use to stream video using UDP protocol.
 
-
     Copyright (C) 2020  Clement Dulouard
 
     This program is free software: you can redistribute it and/or modify
@@ -37,7 +36,7 @@ import numpy as np
 from typing import Optional, NoReturn, List, Union, Tuple, Dict
 import math
 from hermes.messages.UDPMessage import UDPMessage
-from hermes.sockets.UDPSocket import UDPSocket
+from hermes.network.UDPSocket import UDPSocket
 import multiprocessing as mp
 import time
 from hermes.polypheme.Eye import Eye
