@@ -4,11 +4,12 @@
 
 Hermes is a Python library that provide tools for network communication.
 
-It includes four submodules :
-    - messages : Some utils for information transmission on the network.
-    - network : Enhanced sockets for network communication.
-    - polypheme : Utils for video acquisition.
-    - streams : Utils for data streaming.
+It includes four submodules :  
+>
+    1. messages : Some utils for information transmission on the network.  
+    2. network : Enhanced sockets for network communication.  
+    3. polypheme : Utils for video acquisition.  
+    4. streams : Utils for data streaming.  
 
 ## Installation
 
