@@ -161,7 +161,7 @@ def test_two_video_stream_can_transmit_images():
                           socket_port=emitter_address_port[1]).start()
     consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
                            socket_port=consumer_address_port[1], use_rcv_img_buffer=False,
-                           buffer_size=100000).start()
+                           buffer_size=1000000).start()
     while emitter.get_is_running() is False:
         pass
     while consumer.get_is_running() is False:
@@ -169,14 +169,13 @@ def test_two_video_stream_can_transmit_images():
     emitter.refresh_image(expected_img)
     emitter.add_subscriber(consumer_address_port)
     time.sleep(.001)
-
+    emitter.stop()
+    consumer.stop()
     # When
     result = consumer.get_rcv_img()
 
     # Then
     assert np.array_equiv(result, expected_img)
 
-    emitter.stop()
-    consumer.stop()
 
 # python -m pytest -s -vv streams/test/test_VideoStream.py
