@@ -270,7 +270,7 @@ def test_udp_socket_send_encrypted_messages_when_encryption_in_transit_set_to_tr
     msg = b"test"
     socket_ip = "127.0.0.1"
     socket_port = 50017
-    test_socket_port = 50001
+    test_socket_port = 50018
     n_msg = 2
     test_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     test_socket.bind((socket_ip, test_socket_port))
@@ -296,7 +296,7 @@ def test_udp_socket_can_read_encrypted_messages_when_encryption_in_transit_set_t
     # Given
     msg = b"test"
     socket_ip = "127.0.0.1"
-    socket_port = 50018
+    socket_port = 50019
     n_msg = 2
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg,
                            encryption_in_transit=True).start()
@@ -317,7 +317,7 @@ def test_new_udp_socket_correctly_set_enable_multicast():
     enable_multicast = True
 
     # When
-    udp_socket = UDPSocket(enable_multicast=enable_multicast, socket_port=50019).start()
+    udp_socket = UDPSocket(enable_multicast=enable_multicast, socket_port=50020).start()
 
     # Then
     assert udp_socket.enable_multicast is enable_multicast
@@ -330,7 +330,7 @@ def test_new_udp_socket_correctly_set_multicast_ttl():
     multicast_ttl = 3
 
     # When
-    udp_socket = UDPSocket(multicast_ttl=multicast_ttl, socket_port=50020).start()
+    udp_socket = UDPSocket(multicast_ttl=multicast_ttl, socket_port=50021).start()
 
     # Then
     assert udp_socket.multicast_ttl is multicast_ttl
@@ -342,7 +342,7 @@ def test_udp_socket_can_read_unencrypted_messages_when_encryption_in_transit_set
     # Given
     msg = b"test"
     socket_ip = "127.0.0.1"
-    socket_port = 50021
+    socket_port = 50022
     n_msg = 2
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port, max_queue_size=n_msg,
                            encryption_in_transit=True).start()
