@@ -284,7 +284,6 @@ def test_udp_socket_send_encrypted_messages_when_encryption_in_transit_set_to_tr
     time.sleep(.1)
 
     udp_socket.stop()
-    test_socket.shutdown(socket.SHUT_RD)
     test_socket.close()
     time.sleep(.5)
 
