@@ -11,7 +11,7 @@ def test_video_stream_define_an_image_manager_with_correct_parameter():
     max_packet_size = 10000
 
     # When
-    vs = VideoStream(max_packet_size=max_packet_size).start()
+    vs = VideoStream(max_packet_size=max_packet_size, socket_port=60000).start()
 
     # Then
     assert isinstance(vs.im, expected_type)
@@ -24,7 +24,7 @@ def test_video_stream_define_an_empty_list_of_video_topic():
     expected_list = []
 
     # When
-    vs = VideoStream().start()
+    vs = VideoStream(socket_port=60001).start()
 
     # Then
     assert vs.opened_topics == []
@@ -37,7 +37,7 @@ def test_refresh_image_correctly_refresh_image_in_im():
         [[[0, 0, 0], [0, 0, 0], [0, 0, 0]], [[0, 0, 0], [0, 0, 0], [0, 0, 0]], [[0, 0, 0], [0, 0, 0], [0, 0, 0]]])
 
     # When
-    vs = VideoStream().start()
+    vs = VideoStream(socket_port=60002).start()
     vs.refresh_image(expected_img)
 
     # Then
@@ -51,8 +51,8 @@ def test_video_stream_is_created_with_correct_role():
     role_2 = VideoStream.CONSUMER
 
     # When
-    vs1 = VideoStream(role=role_1, socket_port=50001).start()
-    vs2 = VideoStream(role=role_2).start()
+    vs1 = VideoStream(role=role_1, socket_port=60003).start()
+    vs2 = VideoStream(role=role_2, socket_port=60004).start()
 
     # Then
     assert vs1.role == role_1
@@ -70,7 +70,7 @@ def test_video_stream_cannot_be_created_with_unexpected_role():
 
     # Then
     with pytest.raises(ValueError):
-        vs = VideoStream(role=role).start()
+        vs = VideoStream(role=role, socket_port=60005).start()
         vs.stop()
         vs.join()
 
@@ -80,7 +80,7 @@ def test_video_stream_create_two_connection_pipe():
     expected_type = mp.connection.PipeConnection
 
     # When
-    vs = VideoStream().start()
+    vs = VideoStream(socket_port=60006).start()
 
     # Then
     assert type(vs.external_pipe) == expected_type
@@ -91,7 +91,7 @@ def test_video_stream_create_two_connection_pipe():
 
 def test_video_stream_can_be_started_and_stopped():
     # Given
-    vs = VideoStream().start()
+    vs = VideoStream(socket_port=60007).start()
 
     # When
     while vs.get_is_running() is False:
@@ -104,8 +104,8 @@ def test_video_stream_can_be_started_and_stopped():
 
 def test_add_subscriber_correctly_add_a_subscriber():
     # Given
-    sub_address_port = ('127.0.01', 50000)
-    vs = VideoStream().start()
+    sub_address_port = ('127.0.01', 60008)
+    vs = VideoStream(socket_port=60009).start()
     while vs.get_is_running() is False:
         pass
 
@@ -121,8 +121,8 @@ def test_add_subscriber_correctly_add_a_subscriber():
 
 def test_remove_subscriber_correctly_remove_a_subscriber():
     # Given
-    sub_address_port = ('127.0.01', 50000)
-    vs = VideoStream().start()
+    sub_address_port = ('127.0.01', 60010)
+    vs = VideoStream(socket_port=60011).start()
     while vs.get_is_running() is False:
         pass
 
@@ -138,8 +138,8 @@ def test_remove_subscriber_correctly_remove_a_subscriber():
 
 def test_get_rcv_img_return_none_if_rcv_img_buffer_is_empty():
     # Given
-    sub_address_port = ('127.0.01', 50000)
-    vs = VideoStream(role=VideoStream.CONSUMER).start()
+    sub_address_port = ('127.0.01', 60012)
+    vs = VideoStream(role=VideoStream.CONSUMER, socket_port=60013).start()
     while vs.get_is_running() is False:
         pass
 
@@ -156,8 +156,8 @@ def test_get_rcv_img_return_none_if_rcv_img_buffer_is_empty():
 def test_two_video_stream_can_transmit_images():
     # Given
     expected_img = np.array(4 * [4 * 4 * [[0, 0, 0]]])
-    emitter_address_port = ('127.0.0.1', 50000)
-    consumer_address_port = ('127.0.0.1', 50001)
+    emitter_address_port = ('127.0.0.1', 60014)
+    consumer_address_port = ('127.0.0.1', 60015)
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
                           socket_port=emitter_address_port[1]).start()
     consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
