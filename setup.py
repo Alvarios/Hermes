@@ -14,7 +14,6 @@ setuptools.setup(
     url="https://github.com/Alvarios/Hermes",
     packages=setuptools.find_packages(),
     install_requires=[
-        'cmake',
         'cffi',
         "cryptography",
         'numpy',
