@@ -169,10 +169,11 @@ def test_two_video_stream_can_transmit_images():
     emitter.refresh_image(expected_img)
     emitter.add_subscriber(consumer_address_port)
     time.sleep(.001)
-    emitter.stop()
-    consumer.stop()
+
     # When
     result = consumer.get_rcv_img()
+    emitter.stop()
+    consumer.stop()
 
     # Then
     assert np.array_equiv(result, expected_img)
