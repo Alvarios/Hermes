@@ -60,6 +60,7 @@ class SecretTrader:
             GET_PUBLIC_KEY_ID : The message id corresponding to get public key request.
             PUT_PUBLIC_KEY_ID : The message id corresponding to put public key message.
             PUT_PASSWORD_MESSAGE_ID : The message id corresponding to put password.
+            PUT_SECRET_MESSAGE_ID : The message id to put secret.
             END_CONNECTION_ID : The message id corresponding to the end of the connection creation.
             RANDOM_NUMBER_LEN : The number of random bytes used for encrypted messages.
             RSA_PADDING : The padding used for encryption with rsa keys.
@@ -79,7 +80,7 @@ class SecretTrader:
     GET_PUBLIC_KEY_ID = 10
     PUT_PUBLIC_KEY_ID = 20
     PUT_PASSWORD_MESSAGE_ID = 21
-    PUT_ENCRYPTION_KEY_MESSAGE_ID = 22
+    PUT_SECRET_MESSAGE_ID = 22
     END_CONNECTION_ID = 30
     RANDOM_NUMBER_LEN = 8
     RSA_PADDING = padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
@@ -102,7 +103,7 @@ class SecretTrader:
             key_size=2048,
         )
         self._send_public_key: bool = False
-        self._remote_host_key: Union[None, bytes] = None
+        self._remote_host_key = None
         self._password_correct: Union[None, bool] = None
 
     def add_message(self, msg: UDPMessage) -> NoReturn:
@@ -117,6 +118,9 @@ class SecretTrader:
         if int.from_bytes(msg.msg_id, 'little') == SecretTrader.PUT_PASSWORD_MESSAGE_ID:
             payload = self._rsa_key.decrypt(msg.payload, SecretTrader.RSA_PADDING)
             self._password_correct = payload[SecretTrader.RANDOM_NUMBER_LEN:] == self._hash_pass
+        if int.from_bytes(msg.msg_id, 'little') == SecretTrader.PUT_SECRET_MESSAGE_ID:
+            payload = self._rsa_key.decrypt(msg.payload, SecretTrader.RSA_PADDING)
+            self._secret = payload[SecretTrader.RANDOM_NUMBER_LEN:]
 
     def next_message(self) -> UDPMessage:
         """Return the next message to send to remote host based on current instance state.
@@ -134,7 +138,7 @@ class SecretTrader:
         if self._password_correct is False:
             return UDPMessage(msg_id=SecretTrader.END_CONNECTION_ID)
         if self._password_correct and self._remote_host_key is not None:
-            return self._get_key_message()
+            return self._get_secret_message()
         if self.role == SecretTrader.CLIENT or self._password_correct:
             return UDPMessage(msg_id=SecretTrader.GET_PUBLIC_KEY_ID)
 
@@ -144,20 +148,18 @@ class SecretTrader:
         :return password_message: The message that contain the hashed password.
         """
         if self._remote_host_key is not None:
-            encoder = serialization.load_pem_public_key(self._remote_host_key)
             return UDPMessage(msg_id=SecretTrader.PUT_PASSWORD_MESSAGE_ID,
-                              payload=encoder.encrypt(SecretTrader._get_random_bytes(
+                              payload=self._remote_host_key.encrypt(SecretTrader._get_random_bytes(
                                   SecretTrader.RANDOM_NUMBER_LEN) + self._hash_pass, SecretTrader.RSA_PADDING))
 
-    def _get_key_message(self) -> UDPMessage:
+    def _get_secret_message(self) -> UDPMessage:
         """Return a UDPMessage that contain the encryption key encrypted with remote host public key.
 
         :return password_message: The message that contain the encryption key.
         """
         if self._remote_host_key is not None:
-            encoder = serialization.load_pem_public_key(self._remote_host_key)
-            return UDPMessage(msg_id=SecretTrader.PUT_ENCRYPTION_KEY_MESSAGE_ID,
-                              payload=encoder.encrypt(SecretTrader._get_random_bytes(
+            return UDPMessage(msg_id=SecretTrader.PUT_SECRET_MESSAGE_ID,
+                              payload=self._remote_host_key.encrypt(SecretTrader._get_random_bytes(
                                   SecretTrader.RANDOM_NUMBER_LEN) + self._secret,
                                                       SecretTrader.RSA_PADDING))
 

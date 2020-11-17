@@ -8,17 +8,17 @@ import pytest
 
 def test_new_secret_trader_can_be_created_with_correct_role():
     # Given
-    server = SecretTrader.SERVER
-    client = SecretTrader.CLIENT
+    server_role = SecretTrader.SERVER
+    client_role = SecretTrader.CLIENT
     secret = Fernet.generate_key()
 
     # When
-    cm_server = SecretTrader(role=server, secret=secret)
-    cm_client = SecretTrader(role=client)
+    server = SecretTrader(role=server_role, secret=secret)
+    client = SecretTrader(role=client_role)
 
     # Then
-    assert cm_server.role == server
-    assert cm_client.role == client
+    assert server.role == server_role
+    assert client.role == client_role
 
 
 def test_new_secret_trader_can_be_created_with_correct_hash_pass():
@@ -30,10 +30,10 @@ def test_new_secret_trader_can_be_created_with_correct_hash_pass():
     secret = Fernet.generate_key()
 
     # When
-    cm = SecretTrader(hash_pass=hash_pass, secret=secret)
+    sm = SecretTrader(hash_pass=hash_pass, secret=secret)
 
     # Then
-    assert cm._hash_pass == hash_pass
+    assert sm._hash_pass == hash_pass
 
 
 def test_new_secret_trader_can_be_created_with_correct_secret():
@@ -158,10 +158,7 @@ def test_get_password_message_correctly_return_a_udp_message_with_hash_pass():
     hash_pass = digest.finalize()
     secret = Fernet.generate_key()
     cm = SecretTrader(hash_pass=hash_pass, secret=secret)
-    cm._remote_host_key = cm._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                format=serialization.PublicFormat.
-                                                                SubjectPublicKeyInfo)
-
+    cm._remote_host_key = cm._rsa_key.public_key()
     # When
     result = cm._get_password_message()
 
@@ -178,8 +175,7 @@ def test_next_message_return_password_message_when_remote_host_key_is_not_none()
     hash_pass = digest.finalize()
     role = SecretTrader.CLIENT
     cm = SecretTrader(role=role, hash_pass=hash_pass)
-    cm._remote_host_key = cm._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    cm._remote_host_key = cm._rsa_key.public_key()
 
     # When
     result = cm.next_message()
@@ -200,10 +196,7 @@ def test_add_message_accept_connection_when_hash_pass_is_correct():
     client = SecretTrader(role=SecretTrader.CLIENT, hash_pass=hash_pass)
     server = SecretTrader(role=SecretTrader.SERVER, hash_pass=hash_pass, secret=secret)
 
-    client._remote_host_key = server._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                        format=serialization.PublicFormat.
-                                                                        SubjectPublicKeyInfo)
-    # When
+    client._remote_host_key = server._rsa_key.public_key()
     server.add_message(client.next_message())
 
     # Then
@@ -226,9 +219,7 @@ def test_add_message_reject_connection_when_hash_pass_is_incorrect():
     client = SecretTrader(role=SecretTrader.CLIENT, hash_pass=hash_pass_client)
     server = SecretTrader(role=SecretTrader.SERVER, hash_pass=hash_pass_server, secret=secret)
 
-    client._remote_host_key = server._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                        format=serialization.PublicFormat.
-                                                                        SubjectPublicKeyInfo)
+    client._remote_host_key = server._rsa_key.public_key()
 
     # When
     server.add_message(client.next_message())
@@ -253,9 +244,7 @@ def test_next_message_is_end_connection_when_given_password_is_incorrect():
     client = SecretTrader(role=SecretTrader.CLIENT, hash_pass=hash_pass_client)
     server = SecretTrader(role=SecretTrader.SERVER, hash_pass=hash_pass_server, secret=secret)
 
-    client._remote_host_key = server._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                        format=serialization.PublicFormat.
-                                                                        SubjectPublicKeyInfo)
+    client._remote_host_key = server._rsa_key.public_key()
     server.add_message(client.next_message())
 
     # When
@@ -276,9 +265,7 @@ def test_next_message_is_get_public_key_when_given_password_is_correct():
     client = SecretTrader(role=SecretTrader.CLIENT, hash_pass=hash_pass)
     server = SecretTrader(role=SecretTrader.SERVER, hash_pass=hash_pass, secret=secret)
 
-    client._remote_host_key = server._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                        format=serialization.PublicFormat.
-                                                                        SubjectPublicKeyInfo)
+    client._remote_host_key = server._rsa_key.public_key()
     server.add_message(client.next_message())
 
     # When
@@ -293,12 +280,11 @@ def test_get_key_message_return_key_message_encrypted_with_client_public_key():
     secret = Fernet.generate_key()
     role = SecretTrader.SERVER
     cm = SecretTrader(role=role, secret=secret)
-    cm._remote_host_key = cm._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    cm._remote_host_key = cm._rsa_key.public_key()
 
     # When
 
-    result = cm._get_key_message()
+    result = cm._get_secret_message()
 
     # Then
     assert cm._rsa_key.decrypt(result.payload, SecretTrader.RSA_PADDING)[
@@ -310,8 +296,7 @@ def test_next_message_return_key_message_when_password_is_correct_and_remote_hos
     secret = Fernet.generate_key()
     role = SecretTrader.SERVER
     cm = SecretTrader(role=role, secret=secret)
-    cm._remote_host_key = cm._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    cm._remote_host_key = cm._rsa_key.public_key()
     cm._password_correct = True
     # When
     result = cm.next_message()
@@ -344,5 +329,77 @@ def test_new_secret_trader_raise_error_when_role_is_server_and_secret_is_none():
     # Then
     with pytest.raises(ValueError):
         SecretTrader(role=role)
+
+
+def test_secret_traders_can_work_properly_from_beginning_to_password_exchange_when_password_correct():
+    # Given
+    hash_pass = SecretTrader.hash_password(b"test")
+    secret = Fernet.generate_key()
+    server = SecretTrader(role=SecretTrader.SERVER, hash_pass=hash_pass, secret=secret)
+    client = SecretTrader(role=SecretTrader.CLIENT, hash_pass=hash_pass)
+
+    # When
+    ask_server_pub_key_msg = client.next_message()
+    server.add_message(ask_server_pub_key_msg)
+    server_pub_key_msg = server.next_message()
+    client.add_message(server_pub_key_msg)
+    password_msg = client.next_message()
+    server.add_message(password_msg)
+    ask_client_pub_key_msg = server.next_message()
+
+    # Then
+    assert int.from_bytes(ask_client_pub_key_msg.msg_id, "little") == SecretTrader.GET_PUBLIC_KEY_ID
+
+
+def test_secret_traders_can_work_properly_from_beginning_to_password_exchange_when_password_incorrect():
+    # Given
+    hash_pass_server = SecretTrader.hash_password(b"test")
+    hash_pass_client = SecretTrader.hash_password(b"incorrect")
+    secret = Fernet.generate_key()
+    server = SecretTrader(role=SecretTrader.SERVER, hash_pass=hash_pass_server, secret=secret)
+    client = SecretTrader(role=SecretTrader.CLIENT, hash_pass=hash_pass_client)
+
+    # When
+    ask_server_pub_key_msg = client.next_message()
+    server.add_message(ask_server_pub_key_msg)
+    server_pub_key_msg = server.next_message()
+    client.add_message(server_pub_key_msg)
+    password_msg = client.next_message()
+    server.add_message(password_msg)
+    ask_client_pub_key_msg = server.next_message()
+
+    # Then
+    assert int.from_bytes(ask_client_pub_key_msg.msg_id, "little") == SecretTrader.END_CONNECTION_ID
+
+
+def test_secret_traders_can_work_properly_from_beginning_to_secret_exchange_when_password_correct():
+    # Given
+    hash_pass = SecretTrader.hash_password(b"test")
+    secret = Fernet.generate_key()
+    server = SecretTrader(role=SecretTrader.SERVER, hash_pass=hash_pass, secret=secret)
+    client = SecretTrader(role=SecretTrader.CLIENT, hash_pass=hash_pass)
+
+    # When
+    ask_server_pub_key_msg = client.next_message()
+    server.add_message(ask_server_pub_key_msg)
+
+    server_pub_key_msg = server.next_message()
+    client.add_message(server_pub_key_msg)
+
+    password_msg = client.next_message()
+    server.add_message(password_msg)
+
+    ask_client_pub_key_msg = server.next_message()
+    client.add_message(ask_client_pub_key_msg)
+
+    client_pub_key_msg = client.next_message()
+    server.add_message(client_pub_key_msg)
+
+    server_secret_msg = server.next_message()
+    client.add_message(server_secret_msg)
+
+    # Then
+    assert int.from_bytes(server_secret_msg.msg_id, "little") == SecretTrader.PUT_SECRET_MESSAGE_ID
+    assert client._secret == server._secret
 
 # python -m pytest -s hermes/messages/test/test_SecretTrader.py
