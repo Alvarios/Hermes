@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Implementation of a secret trader for secure secret exchanges.
+"""Implementation of a handshake for secure secret exchanges and authentication.
 
     Copyright (C) 2020  Clement Dulouard
 
@@ -39,7 +39,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 import numpy as np
 
 
-class SecretTrader:
+class HandShake:
     """A class can manage secret exchange between two instances of this class, one with a role of server
     the other one with the role of client. It is designed to exchange symmetric encryption key but can be
     used to exchange any secret.
@@ -55,8 +55,8 @@ class SecretTrader:
             Step 7 : Server send its secret encrypted with client's public key to client.
 
         Constants :
-            SERVER : Value that tell the SecretTrader role is server.
-            CLIENT : Value that tell the SecretTrader role is client.
+            SERVER : Value that tell the HandShake role is server.
+            CLIENT : Value that tell the HandShake role is client.
             GET_PUBLIC_KEY_ID : The message id corresponding to get public key request.
             PUT_PUBLIC_KEY_ID : The message id corresponding to put public key message.
             PUT_PASSWORD_MESSAGE_ID : The message id corresponding to put password.
@@ -66,7 +66,7 @@ class SecretTrader:
             RSA_PADDING : The padding used for encryption with rsa keys.
 
         Attributes :
-            role : The role of the current SecretTrader (client or server).
+            role : The role of the current HandShake (client or server).
             _hash_pass : The password as bytes needed for encryption key request.
             _secret : A key used for encryption. It will be given to the client if it send the correct pass.
             _rsa_key : The rsa key used for this connection.
@@ -87,15 +87,15 @@ class SecretTrader:
 
     def __init__(self, role: Optional[str] = SERVER, hash_pass: Optional[Union[None, bytes]] = None,
                  secret: Optional[Union[None, bytes]] = None) -> None:
-        """Create a new SecretTrader object with given parameter.
+        """Create a new HandShake object with given parameter.
 
-        :param role: The role of the current SecretTrader (client or server).
+        :param role: The role of the current HandShake (client or server).
         :param hash_pass: The password as bytes needed for encryption key request.
         :param secret : A key used for encryption. Required if role is server.
         """
         self.role: str = role
         self._hash_pass: Union[None, bytes] = hash_pass
-        if role == SecretTrader.SERVER and secret is None:
+        if role == HandShake.SERVER and secret is None:
             raise ValueError
         self._secret: Union[None, bytes] = secret
         self._rsa_key = rsa.generate_private_key(
@@ -111,16 +111,16 @@ class SecretTrader:
 
         :param msg: The UDPMessage to read.
         """
-        if int.from_bytes(msg.msg_id, 'little') == SecretTrader.GET_PUBLIC_KEY_ID:
+        if int.from_bytes(msg.msg_id, 'little') == HandShake.GET_PUBLIC_KEY_ID:
             self._send_public_key = True
-        if int.from_bytes(msg.msg_id, 'little') == SecretTrader.PUT_PUBLIC_KEY_ID:
+        if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_PUBLIC_KEY_ID:
             self._remote_host_key = serialization.load_pem_public_key(msg.payload)
-        if int.from_bytes(msg.msg_id, 'little') == SecretTrader.PUT_PASSWORD_MESSAGE_ID:
-            payload = self._rsa_key.decrypt(msg.payload, SecretTrader.RSA_PADDING)
-            self._password_correct = payload[SecretTrader.RANDOM_NUMBER_LEN:] == self._hash_pass
-        if int.from_bytes(msg.msg_id, 'little') == SecretTrader.PUT_SECRET_MESSAGE_ID:
-            payload = self._rsa_key.decrypt(msg.payload, SecretTrader.RSA_PADDING)
-            self._secret = payload[SecretTrader.RANDOM_NUMBER_LEN:]
+        if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_PASSWORD_MESSAGE_ID:
+            payload = self._rsa_key.decrypt(msg.payload, HandShake.RSA_PADDING)
+            self._password_correct = payload[HandShake.RANDOM_NUMBER_LEN:] == self._hash_pass
+        if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_SECRET_MESSAGE_ID:
+            payload = self._rsa_key.decrypt(msg.payload, HandShake.RSA_PADDING)
+            self._secret = payload[HandShake.RANDOM_NUMBER_LEN:]
 
     def next_message(self) -> UDPMessage:
         """Return the next message to send to remote host based on current instance state.
@@ -129,18 +129,18 @@ class SecretTrader:
         """
         if self._send_public_key:
             self._send_public_key = False
-            return UDPMessage(msg_id=SecretTrader.PUT_PUBLIC_KEY_ID,
+            return UDPMessage(msg_id=HandShake.PUT_PUBLIC_KEY_ID,
                               payload=self._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
                                                                               format=serialization.PublicFormat.
                                                                               SubjectPublicKeyInfo))
-        if self._remote_host_key is not None and self.role == SecretTrader.CLIENT:
+        if self._remote_host_key is not None and self.role == HandShake.CLIENT:
             return self._get_password_message()
         if self._password_correct is False:
-            return UDPMessage(msg_id=SecretTrader.END_CONNECTION_ID)
+            return UDPMessage(msg_id=HandShake.END_CONNECTION_ID)
         if self._password_correct and self._remote_host_key is not None:
             return self._get_secret_message()
-        if self.role == SecretTrader.CLIENT or self._password_correct:
-            return UDPMessage(msg_id=SecretTrader.GET_PUBLIC_KEY_ID)
+        if self.role == HandShake.CLIENT or self._password_correct:
+            return UDPMessage(msg_id=HandShake.GET_PUBLIC_KEY_ID)
 
     def _get_password_message(self) -> UDPMessage:
         """Return a UDPMessage that contain the hashed password encrypted with remote host public key.
@@ -148,9 +148,9 @@ class SecretTrader:
         :return password_message: The message that contain the hashed password.
         """
         if self._remote_host_key is not None:
-            return UDPMessage(msg_id=SecretTrader.PUT_PASSWORD_MESSAGE_ID,
-                              payload=self._remote_host_key.encrypt(SecretTrader._get_random_bytes(
-                                  SecretTrader.RANDOM_NUMBER_LEN) + self._hash_pass, SecretTrader.RSA_PADDING))
+            return UDPMessage(msg_id=HandShake.PUT_PASSWORD_MESSAGE_ID,
+                              payload=self._remote_host_key.encrypt(HandShake._get_random_bytes(
+                                  HandShake.RANDOM_NUMBER_LEN) + self._hash_pass, HandShake.RSA_PADDING))
 
     def _get_secret_message(self) -> UDPMessage:
         """Return a UDPMessage that contain the encryption key encrypted with remote host public key.
@@ -158,10 +158,10 @@ class SecretTrader:
         :return password_message: The message that contain the encryption key.
         """
         if self._remote_host_key is not None:
-            return UDPMessage(msg_id=SecretTrader.PUT_SECRET_MESSAGE_ID,
-                              payload=self._remote_host_key.encrypt(SecretTrader._get_random_bytes(
-                                  SecretTrader.RANDOM_NUMBER_LEN) + self._secret,
-                                                      SecretTrader.RSA_PADDING))
+            return UDPMessage(msg_id=HandShake.PUT_SECRET_MESSAGE_ID,
+                              payload=self._remote_host_key.encrypt(HandShake._get_random_bytes(
+                                  HandShake.RANDOM_NUMBER_LEN) + self._secret,
+                                                                    HandShake.RSA_PADDING))
 
     @staticmethod
     def _get_random_bytes(n_bytes: int) -> bytes:
