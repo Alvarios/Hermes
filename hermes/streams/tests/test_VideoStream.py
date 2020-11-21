@@ -64,7 +64,7 @@ def test_video_stream_is_created_with_correct_role():
 
 def test_video_stream_cannot_be_created_with_unexpected_role():
     # Given
-    role = "test"
+    role = "tests"
 
     # When
 
@@ -179,4 +179,4 @@ def test_two_video_stream_can_transmit_images():
     assert np.array_equiv(result, expected_img)
 
 
-# python -m pytest -s -vv streams/test/test_VideoStream.py
+# python -m pytest -s -vv streams/tests/test_VideoStream.py

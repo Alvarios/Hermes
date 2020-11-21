@@ -57,11 +57,11 @@ class HandShake:
         Constants :
             SERVER : Value that tell the HandShake role is server.
             CLIENT : Value that tell the HandShake role is client.
-            GET_PUBLIC_KEY_ID : The message id corresponding to get public key request.
-            PUT_PUBLIC_KEY_ID : The message id corresponding to put public key message.
-            PUT_PASSWORD_MESSAGE_ID : The message id corresponding to put password.
-            PUT_SECRET_MESSAGE_ID : The message id to put secret.
-            END_CONNECTION_ID : The message id corresponding to the end of the connection creation.
+            GET_PUBLIC_KEY_TOPIC : The message id corresponding to get public key request.
+            PUT_PUBLIC_KEY_TOPIC : The message id corresponding to put public key message.
+            PUT_PASSWORD_MESSAGE_TOPIC : The message id corresponding to put password.
+            PUT_SECRET_MESSAGE_TOPIC : The message id to put secret.
+            END_CONNECTION_TOPIC : The message id corresponding to the end of the connection creation.
             RANDOM_NUMBER_LEN : The number of random bytes used for encrypted messages.
             RSA_PADDING : The padding used for encryption with rsa keys.
 
@@ -77,11 +77,11 @@ class HandShake:
 
     SERVER = "server"
     CLIENT = "client"
-    GET_PUBLIC_KEY_ID = 10
-    PUT_PUBLIC_KEY_ID = 20
-    PUT_PASSWORD_MESSAGE_ID = 21
-    PUT_SECRET_MESSAGE_ID = 22
-    END_CONNECTION_ID = 30
+    GET_PUBLIC_KEY_TOPIC = 10
+    PUT_PUBLIC_KEY_TOPIC = 20
+    PUT_PASSWORD_MESSAGE_TOPIC = 21
+    PUT_SECRET_MESSAGE_TOPIC = 22
+    END_CONNECTION_TOPIC = 30
     RANDOM_NUMBER_LEN = 8
     RSA_PADDING = padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None)
 
@@ -111,14 +111,14 @@ class HandShake:
 
         :param msg: The UDPMessage to read.
         """
-        if int.from_bytes(msg.msg_id, 'little') == HandShake.GET_PUBLIC_KEY_ID:
+        if int.from_bytes(msg.msg_id, 'little') == HandShake.GET_PUBLIC_KEY_TOPIC:
             self._send_public_key = True
-        if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_PUBLIC_KEY_ID:
+        if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_PUBLIC_KEY_TOPIC:
             self._remote_host_key = serialization.load_pem_public_key(msg.payload)
-        if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_PASSWORD_MESSAGE_ID:
+        if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_PASSWORD_MESSAGE_TOPIC:
             payload = self._rsa_key.decrypt(msg.payload, HandShake.RSA_PADDING)
             self._password_correct = payload[HandShake.RANDOM_NUMBER_LEN:] == self._hash_pass
-        if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_SECRET_MESSAGE_ID:
+        if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_SECRET_MESSAGE_TOPIC:
             payload = self._rsa_key.decrypt(msg.payload, HandShake.RSA_PADDING)
             self._secret = payload[HandShake.RANDOM_NUMBER_LEN:]
 
@@ -129,18 +129,18 @@ class HandShake:
         """
         if self._send_public_key:
             self._send_public_key = False
-            return UDPMessage(msg_id=HandShake.PUT_PUBLIC_KEY_ID,
+            return UDPMessage(msg_id=HandShake.PUT_PUBLIC_KEY_TOPIC,
                               payload=self._rsa_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
                                                                               format=serialization.PublicFormat.
                                                                               SubjectPublicKeyInfo))
         if self._remote_host_key is not None and self.role == HandShake.CLIENT:
             return self._get_password_message()
         if self._password_correct is False:
-            return UDPMessage(msg_id=HandShake.END_CONNECTION_ID)
+            return UDPMessage(msg_id=HandShake.END_CONNECTION_TOPIC)
         if self._password_correct and self._remote_host_key is not None:
             return self._get_secret_message()
         if self.role == HandShake.CLIENT or self._password_correct:
-            return UDPMessage(msg_id=HandShake.GET_PUBLIC_KEY_ID)
+            return UDPMessage(msg_id=HandShake.GET_PUBLIC_KEY_TOPIC)
 
     def _get_password_message(self) -> UDPMessage:
         """Return a UDPMessage that contain the hashed password encrypted with remote host public key.
@@ -148,7 +148,7 @@ class HandShake:
         :return password_message: The message that contain the hashed password.
         """
         if self._remote_host_key is not None:
-            return UDPMessage(msg_id=HandShake.PUT_PASSWORD_MESSAGE_ID,
+            return UDPMessage(msg_id=HandShake.PUT_PASSWORD_MESSAGE_TOPIC,
                               payload=self._remote_host_key.encrypt(HandShake._get_random_bytes(
                                   HandShake.RANDOM_NUMBER_LEN) + self._hash_pass, HandShake.RSA_PADDING))
 
@@ -158,7 +158,7 @@ class HandShake:
         :return password_message: The message that contain the encryption key.
         """
         if self._remote_host_key is not None:
-            return UDPMessage(msg_id=HandShake.PUT_SECRET_MESSAGE_ID,
+            return UDPMessage(msg_id=HandShake.PUT_SECRET_MESSAGE_TOPIC,
                               payload=self._remote_host_key.encrypt(HandShake._get_random_bytes(
                                   HandShake.RANDOM_NUMBER_LEN) + self._secret,
                                                                     HandShake.RSA_PADDING))

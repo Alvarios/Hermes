@@ -116,7 +116,7 @@ def test_socket_can_receive_message_while_running():
     # Given
     socket_ip = "127.0.0.1"
     socket_port = 50008
-    msg = str.encode("test", "utf8")
+    msg = str.encode("tests", "utf8")
 
     # When
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port).start()
@@ -135,7 +135,7 @@ def test_socket_can_send_message_while_running():
     # Given
     socket_ip = "127.0.0.1"
     socket_port = 50009
-    msg = str.encode("test", "utf8")
+    msg = str.encode("tests", "utf8")
 
     # When
     udp_socket = UDPSocket(socket_ip=socket_ip, socket_port=socket_port).start()
@@ -154,7 +154,7 @@ def test_socket_can_received_multiple_message_while_running():
     # Given
     socket_ip = "127.0.0.1"
     socket_port = 50010
-    msg = str.encode("test", "utf8")
+    msg = str.encode("tests", "utf8")
     n_msg = 10
 
     # When
@@ -247,7 +247,7 @@ def test_change_key_correctly_change_the_fernet_encoder():
     # Given
     key_old = Fernet.generate_key()
     key_new = Fernet.generate_key()
-    msg = b"test"
+    msg = b"tests"
 
     # When
     udp_socket = UDPSocket(key=key_old, socket_port=50016).start()
@@ -267,7 +267,7 @@ def test_udp_socket_send_encrypted_messages_when_encryption_in_transit_set_to_tr
     # Given
     key = Fernet.generate_key()
     test_fernet = Fernet(key=key)
-    msg = b"test"
+    msg = b"tests"
     socket_ip = "127.0.0.1"
     socket_port = 50017
     test_socket_port = 50018
@@ -293,7 +293,7 @@ def test_udp_socket_send_encrypted_messages_when_encryption_in_transit_set_to_tr
 
 def test_udp_socket_can_read_encrypted_messages_when_encryption_in_transit_set_to_true():
     # Given
-    msg = b"test"
+    msg = b"tests"
     socket_ip = "127.0.0.1"
     socket_port = 50019
     n_msg = 2
@@ -339,7 +339,7 @@ def test_new_udp_socket_correctly_set_multicast_ttl():
 
 def test_udp_socket_can_read_unencrypted_messages_when_encryption_in_transit_set_to_true():
     # Given
-    msg = b"test"
+    msg = b"tests"
     socket_ip = "127.0.0.1"
     socket_port = 50022
     n_msg = 2
