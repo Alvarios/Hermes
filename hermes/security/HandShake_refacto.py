@@ -33,37 +33,58 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 """
 
 from typing import Optional, Union, NoReturn
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from hermes.messages.UDPMessage import UDPMessage
-from cryptography.hazmat.primitives import hashes, serialization
-import numpy as np
-import os
-from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
-from cryptography.exceptions import InvalidKey, AlreadyFinalized
+from cryptography.hazmat.primitives import serialization
 import hermes.messages.codes as codes
 from cryptography.hazmat.primitives.asymmetric import ec
+from hermes.security.utils import verify_password_scrypt
 
 
 class HandShake:
-    """A class can manage secret exchange between two instances of this class, one with a role of server
-    the other one with the role of client. It is designed to exchange symmetric encryption key but can be
-    used to exchange any secret.
+    """A class that can be used for handshake between a client and a server. The main job is to
+    provide a way to create a shared key in a secure way using Elliptic Curve Diffie-Hellman (ECDH) to
+    create a secure communication tunnel between client and server.
+
+    An additional layer of security can be added by requiring client authentication before validating
+    connection.
 
         The communication between client and server work as following :
 
-            Step 1 : Client ask server's public key
-            Step 2 : Server send its public key to server.
-            Step 3 Client send hashed password encrypted with server public key to server
-            Step 4 (if password incorrect) : Server send end connection message to client.
-            Step 4 (if password correct) : Server ask client's public key.
-            Step 5 : Client send its public key to server.
-            Step 7 : Server send its secret encrypted with client's public key to client.
+            Step 1 : Client ask server's to connect.
+            Step 2 : Server send its public key to client.
+            Step 3 Client send it's public key to server.
+
+            if no authentication required :
+                Step 4 : Server send connection approved message to client and both can used the shared key.
+                for secure connection
+
+            if authentication is required :
+                Step 4 : Server inform client the authentication is required.
+                Step 5 : Client send authentication information to server.
+                Step 6 : Server send connection approved to client if information is correct else it send
+                        connection failed message.
 
         Constants :
+            SERVER : Value that tell the HandShake role is server.
+            CLIENT : Value that tell the HandShake role is client.
 
+            CONNECTION_FAILED_TOPIC : UDPMessage topic used to inform connection failed.
+            CONNECTION_REQUEST_TOPIC : UDPMessage topic used to inform a client want to create a connection.
+            SERVER_KEY_SHARE_TOPIC : UDPMessage topic used to inform the server has send its public key.
+            CLIENT_KEY_SHARE_TOPIC : UDPMessage topic used to inform the client has send its public key.
+            CONNECTION_APPROVED_TOPIC : UDPMessage topic used to inform the connection has been approved by the server.
+            AUTHENTICATION_REQUIRED_TOPIC : UDPMessage topic used to inform the authentication is required to approve
+                                            the connection.
 
         Attributes :
-
+            role : The role of the current HandShake (client or server).
+            _derived_password : Only required for role server. The derived password used for authentication (if set
+                                to None no authentication is required)
+            _password_salt : Only required for role server. The salt used for key derivation corresponding to
+                            _derived_password as bytes.
+            _last_step : Stores the last validated step of the handshake.
+            _peer_public_key : Stores the peer public key when it has been received.
+            _private_key : Stores the ephemeral private key used for handshake.
     """
 
     SERVER = "server"
@@ -74,39 +95,41 @@ class HandShake:
     SERVER_KEY_SHARE_TOPIC = 2
     CLIENT_KEY_SHARE_TOPIC = 3
     CONNECTION_APPROVED_TOPIC = 4
+    AUTHENTICATION_REQUIRED_TOPIC = 5
 
     def __init__(self, role: Optional[str] = SERVER, derived_password: Optional[Union[None, bytes]] = None,
                  password_salt: Optional[Union[None, bytes]] = None) -> None:
+        """Create a new HandShake object with given parameter.
+
+        :param role: The role of the current HandShake (client or server).
+        :param derived_password: The derived password to use for password verification as bytes. If None no
+        authentication will be required during the handshake.
+        :param password_salt : The salt used for key derivation corresponding to _derived_password as bytes.
+        """
         self.role = role
-        self.derived_password = derived_password
-        self.password_salt = password_salt
+        self._derived_password = derived_password
+        self._password_salt = password_salt
         self._last_step = 0
         self._peer_public_key = None
-        self._private_key = ec.generate_private_key(
-            ec.SECP384R1()
-        )
+        self._private_key = ec.generate_private_key(ec.SECP384R1())
 
-    def verify_password(self, password_to_verify):
-        if self.derived_password is None:
+    def verify_password(self, password_to_verify: bytes) -> bool:
+        """Check if the input password correspond to the instance derived password and salt.
+
+        :param password_to_verify: The password to verify as bytes.
+
+        :return: True if no derived password has been set or if the input is verified, else False.
+        """
+        if self._derived_password is None:
             return True
-        password_correct = False
-        kdf = Scrypt(
-            salt=self.password_salt,
-            length=32,
-            n=2 ** 14,
-            r=8,
-            p=1,
-        )
-        try:
-            kdf.verify(password_to_verify, self.derived_password)
-            password_correct = True
-        except InvalidKey:
-            pass
-        except AlreadyFinalized:
-            pass
-        return password_correct
+        return verify_password_scrypt(password_to_verify=password_to_verify, derived_password=self._derived_password,
+                                      password_salt=self._password_salt)
 
     def next_message(self) -> Union[None, UDPMessage]:
+        """Return the next message to send to remote host based on current instance state.
+
+        :return next_message: A UDPMessage to send to remote host to continue handshake process.
+        """
         if self.role == HandShake.CLIENT:
             # TODO: Add all protocol version available in payload when connection request.
             if self._last_step == HandShake.SERVER_KEY_SHARE_TOPIC:
@@ -116,6 +139,7 @@ class HandShake:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CLIENT_KEY_SHARE_TOPIC,
                                   payload=public_bytes)
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC)
+
         if self.role == HandShake.SERVER:
             if self._last_step == HandShake.CONNECTION_REQUEST_TOPIC:
                 public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
@@ -123,11 +147,17 @@ class HandShake:
                                                                            SubjectPublicKeyInfo)
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC,
                                   payload=public_bytes)
-            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC:
+            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is None:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
+            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is not None:
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC)
             return None
 
-    def add_message(self, msg: UDPMessage):
+    def add_message(self, msg: UDPMessage) -> NoReturn:
+        """Handle given message and change HandShake state if needed.
+
+        :param msg: The UDPMessage to read.
+        """
         msg_id = int.from_bytes(msg.msg_id, 'little')
         msg_topic = int.from_bytes(msg.topic, 'little')
         if msg_id != codes.HANDSHAKE:
@@ -141,5 +171,9 @@ class HandShake:
             self._last_step = msg_topic
             self._peer_public_key = serialization.load_pem_public_key(msg.payload, )
 
-    def get_shared_key(self):
+    def get_shared_key(self) -> bytes:
+        """Return the resulting key after Diffie-Hellman key exchange.
+
+        :return: The shared key generated using ECDH as bytes.
+        """
         return self._private_key.exchange(ec.ECDH(), self._peer_public_key)

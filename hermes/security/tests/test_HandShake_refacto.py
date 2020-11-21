@@ -5,6 +5,7 @@ from hermes.messages.UDPMessage import UDPMessage
 import hermes.messages.codes as codes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from hermes.security.utils import derive_password_scrypt
 
 
 def test_hand_shake_verify_password_return_true_if_given_password_is_correct_and_role_is_server():
@@ -163,6 +164,26 @@ def test_next_message_return_connection_approved_message_when_connection_step_4_
     server = HandShake(role=HandShake.SERVER)
     client = HandShake(role=HandShake.CLIENT)
     expected_message = UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    # When
+    result = server.next_message()
+
+    # Then
+    assert result.msg_id == expected_message.msg_id
+    assert result.topic == expected_message.topic
+
+
+def test_next_message_return_authentication_required_message_when_connection_step_4_and_role_is_server_with_password():
+    # Given
+    password_to_derive = b"test"
+    password_salt = os.urandom(16)
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    client = HandShake(role=HandShake.CLIENT, password_salt=password_salt, derived_password=derived_password)
+    expected_message = UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC)
 
     server.add_message(client.next_message())
     client.add_message(server.next_message())
