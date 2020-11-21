@@ -41,6 +41,7 @@ import os
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.exceptions import InvalidKey, AlreadyFinalized
 import hermes.messages.codes as codes
+from cryptography.hazmat.primitives.asymmetric import ec
 
 
 class HandShake:
@@ -68,15 +69,22 @@ class HandShake:
     SERVER = "server"
     CLIENT = "client"
 
-    CONNECTION_FAILED = 0
+    CONNECTION_FAILED_TOPIC = 0
     CONNECTION_REQUEST_TOPIC = 1
-    CONNECTION_ACKNOWLEDGE_TOPIC = 1
+    SERVER_KEY_SHARE_TOPIC = 2
+    CLIENT_KEY_SHARE_TOPIC = 3
+    CONNECTION_APPROVED_TOPIC = 4
 
     def __init__(self, role: Optional[str] = SERVER, derived_password: Optional[Union[None, bytes]] = None,
                  password_salt: Optional[Union[None, bytes]] = None) -> None:
         self.role = role
         self.derived_password = derived_password
         self.password_salt = password_salt
+        self._last_step = 0
+        self._peer_public_key = None
+        self._private_key = ec.generate_private_key(
+            ec.SECP384R1()
+        )
 
     def verify_password(self, password_to_verify):
         if self.derived_password is None:
@@ -100,9 +108,38 @@ class HandShake:
 
     def next_message(self) -> Union[None, UDPMessage]:
         if self.role == HandShake.CLIENT:
+            # TODO: Add all protocol version available in payload when connection request.
+            if self._last_step == HandShake.SERVER_KEY_SHARE_TOPIC:
+                public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                           format=serialization.PublicFormat.
+                                                                           SubjectPublicKeyInfo)
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CLIENT_KEY_SHARE_TOPIC,
+                                  payload=public_bytes)
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC)
         if self.role == HandShake.SERVER:
+            if self._last_step == HandShake.CONNECTION_REQUEST_TOPIC:
+                public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                           format=serialization.PublicFormat.
+                                                                           SubjectPublicKeyInfo)
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC,
+                                  payload=public_bytes)
+            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC:
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
             return None
 
-    # def get_public_key(self):
-    #     pass
+    def add_message(self, msg: UDPMessage):
+        msg_id = int.from_bytes(msg.msg_id, 'little')
+        msg_topic = int.from_bytes(msg.topic, 'little')
+        if msg_id != codes.HANDSHAKE:
+            return
+        if msg_topic == HandShake.CONNECTION_REQUEST_TOPIC:
+            self._last_step = msg_topic
+        if msg_topic == HandShake.SERVER_KEY_SHARE_TOPIC:
+            self._last_step = msg_topic
+            self._peer_public_key = serialization.load_pem_public_key(msg.payload, )
+        if msg_topic == HandShake.CLIENT_KEY_SHARE_TOPIC:
+            self._last_step = msg_topic
+            self._peer_public_key = serialization.load_pem_public_key(msg.payload, )
+
+    def get_shared_key(self):
+        return self._private_key.exchange(ec.ECDH(), self._peer_public_key)
