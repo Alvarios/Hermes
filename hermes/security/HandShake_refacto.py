@@ -37,7 +37,9 @@ from hermes.messages.UDPMessage import UDPMessage
 from cryptography.hazmat.primitives import serialization
 import hermes.messages.codes as codes
 from cryptography.hazmat.primitives.asymmetric import ec
-from hermes.security.utils import verify_password_scrypt
+from hermes.security.utils import verify_password_scrypt, derive_key_hkdf
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+import os
 
 
 class HandShake:
@@ -75,6 +77,8 @@ class HandShake:
             CONNECTION_APPROVED_TOPIC : UDPMessage topic used to inform the connection has been approved by the server.
             AUTHENTICATION_REQUIRED_TOPIC : UDPMessage topic used to inform the authentication is required to approve
                                             the connection.
+            AUTHENTICATION_TOPIC : UDPMessage topic used to inform the message contain the authentication information..
+            NONCE_LENGTH : The length of nonce used for encryption.
 
         Attributes :
             role : The role of the current HandShake (client or server).
@@ -85,6 +89,8 @@ class HandShake:
             _last_step : Stores the last validated step of the handshake.
             _peer_public_key : Stores the peer public key when it has been received.
             _private_key : Stores the ephemeral private key used for handshake.
+            _symmetric_encryption_key : The key used for symmetric encryption (needed for secure authentication).
+            _authentication_approved : Boolean that is set to True if the authentication is successful.
     """
 
     SERVER = "server"
@@ -96,15 +102,21 @@ class HandShake:
     CLIENT_KEY_SHARE_TOPIC = 3
     CONNECTION_APPROVED_TOPIC = 4
     AUTHENTICATION_REQUIRED_TOPIC = 5
+    AUTHENTICATION_TOPIC = 6
+
+    NONCE_LENGTH = 12
 
     def __init__(self, role: Optional[str] = SERVER, derived_password: Optional[Union[None, bytes]] = None,
-                 password_salt: Optional[Union[None, bytes]] = None) -> None:
+                 password_salt: Optional[Union[None, bytes]] = None, authentication_information=None) -> None:
         """Create a new HandShake object with given parameter.
 
         :param role: The role of the current HandShake (client or server).
-        :param derived_password: The derived password to use for password verification as bytes. If None no
-        authentication will be required during the handshake.
-        :param password_salt : The salt used for key derivation corresponding to _derived_password as bytes.
+        :param derived_password: Only required for role server. The derived password to use for password verification as
+         bytes. If None no authentication will be required during the handshake.
+        :param password_salt : Only required for role server. The salt used for key derivation corresponding to
+        derived_password as bytes.
+        :param authentication_information :  Only required for role client. The information used by client
+        for authentication.
         """
         self.role = role
         self._derived_password = derived_password
@@ -112,8 +124,11 @@ class HandShake:
         self._last_step = 0
         self._peer_public_key = None
         self._private_key = ec.generate_private_key(ec.SECP384R1())
+        self._symmetric_encryption_key = None
+        self._authentication_information = authentication_information
+        self._authentication_approved = False
 
-    def verify_password(self, password_to_verify: bytes) -> bool:
+    def _verify_password(self, password_to_verify: bytes) -> bool:
         """Check if the input password correspond to the instance derived password and salt.
 
         :param password_to_verify: The password to verify as bytes.
@@ -138,6 +153,9 @@ class HandShake:
                                                                            SubjectPublicKeyInfo)
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CLIENT_KEY_SHARE_TOPIC,
                                   payload=public_bytes)
+            if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC,
+                                  payload=self._encrypt(self._authentication_information))
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC)
 
         if self.role == HandShake.SERVER:
@@ -151,6 +169,10 @@ class HandShake:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
             if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is not None:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC)
+            if self._last_step == HandShake.AUTHENTICATION_TOPIC and self._derived_password is not None:
+                if self._authentication_approved:
+                    return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
             return None
 
     def add_message(self, msg: UDPMessage) -> NoReturn:
@@ -167,9 +189,16 @@ class HandShake:
         if msg_topic == HandShake.SERVER_KEY_SHARE_TOPIC:
             self._last_step = msg_topic
             self._peer_public_key = serialization.load_pem_public_key(msg.payload, )
+            self._symmetric_encryption_key = derive_key_hkdf(key=self.get_shared_key(), length=32)
         if msg_topic == HandShake.CLIENT_KEY_SHARE_TOPIC:
             self._last_step = msg_topic
             self._peer_public_key = serialization.load_pem_public_key(msg.payload, )
+            self._symmetric_encryption_key = derive_key_hkdf(key=self.get_shared_key(), length=32)
+        if msg_topic == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
+            self._last_step = msg_topic
+        if msg_topic == HandShake.AUTHENTICATION_TOPIC:
+            self._last_step = msg_topic
+            self._authentication_approved = self._verify_password(self._decrypt(msg.payload))
 
     def get_shared_key(self) -> bytes:
         """Return the resulting key after Diffie-Hellman key exchange.
@@ -177,3 +206,25 @@ class HandShake:
         :return: The shared key generated using ECDH as bytes.
         """
         return self._private_key.exchange(ec.ECDH(), self._peer_public_key)
+
+    def _encrypt(self, data: bytes) -> bytes:
+        """Encrypt input with ChaCha20Poly1305 algorithm using _symmetric_encryption_key as key.
+
+        :param data: The data to encrypt.
+
+        :return: Encrypted data as bytes.
+        """
+        chacha = ChaCha20Poly1305(self._symmetric_encryption_key)
+        nonce = os.urandom(HandShake.NONCE_LENGTH)
+        return nonce + chacha.encrypt(nonce, data, b"")
+
+    def _decrypt(self, encrypted_message: bytes) -> bytes:
+        """Decrypt data encrypted with _encrypt.
+
+        :param encrypted_message: The data encrypted with _encrypt that need to be decrypted.
+
+        :return: The decrypted data as bytes.
+        """
+        chacha = ChaCha20Poly1305(self._symmetric_encryption_key)
+        return chacha.decrypt(encrypted_message[:HandShake.NONCE_LENGTH], encrypted_message[HandShake.NONCE_LENGTH:],
+                              b"")

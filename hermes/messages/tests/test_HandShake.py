@@ -163,7 +163,7 @@ def test_get_password_message_correctly_return_a_udp_message_with_hash_pass():
     result = cm._get_password_message()
 
     # Then
-    assert cm._rsa_key.decrypt(result.payload, HandShake.RSA_PADDING)[
+    assert cm._rsa_key._decrypt(result.payload, HandShake.RSA_PADDING)[
            HandShake.RANDOM_NUMBER_LEN:] == hash_pass
 
 
@@ -181,7 +181,7 @@ def test_next_message_return_password_message_when_remote_host_key_is_not_none()
     result = cm.next_message()
 
     # Then
-    assert cm._rsa_key.decrypt(result.payload, HandShake.RSA_PADDING)[
+    assert cm._rsa_key._decrypt(result.payload, HandShake.RSA_PADDING)[
            HandShake.RANDOM_NUMBER_LEN:] == hash_pass
 
 
@@ -287,7 +287,7 @@ def test_get_key_message_return_key_message_encrypted_with_client_public_key():
     result = server._get_secret_message()
 
     # Then
-    assert server._rsa_key.decrypt(result.payload, HandShake.RSA_PADDING)[
+    assert server._rsa_key._decrypt(result.payload, HandShake.RSA_PADDING)[
            HandShake.RANDOM_NUMBER_LEN:] == secret
 
 
@@ -302,7 +302,7 @@ def test_next_message_return_key_message_when_password_is_correct_and_remote_hos
     result = server.next_message()
 
     # Then
-    assert server._rsa_key.decrypt(result.payload, HandShake.RSA_PADDING)[
+    assert server._rsa_key._decrypt(result.payload, HandShake.RSA_PADDING)[
            HandShake.RANDOM_NUMBER_LEN:] == secret
 
 

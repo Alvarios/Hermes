@@ -116,10 +116,10 @@ class HandShake:
         if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_PUBLIC_KEY_TOPIC:
             self._remote_host_key = serialization.load_pem_public_key(msg.payload)
         if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_PASSWORD_MESSAGE_TOPIC:
-            payload = self._rsa_key.decrypt(msg.payload, HandShake.RSA_PADDING)
+            payload = self._rsa_key._decrypt(msg.payload, HandShake.RSA_PADDING)
             self._password_correct = payload[HandShake.RANDOM_NUMBER_LEN:] == self._hash_pass
         if int.from_bytes(msg.msg_id, 'little') == HandShake.PUT_SECRET_MESSAGE_TOPIC:
-            payload = self._rsa_key.decrypt(msg.payload, HandShake.RSA_PADDING)
+            payload = self._rsa_key._decrypt(msg.payload, HandShake.RSA_PADDING)
             self._secret = payload[HandShake.RANDOM_NUMBER_LEN:]
 
     def next_message(self) -> UDPMessage:
@@ -149,7 +149,7 @@ class HandShake:
         """
         if self._remote_host_key is not None:
             return UDPMessage(msg_id=HandShake.PUT_PASSWORD_MESSAGE_TOPIC,
-                              payload=self._remote_host_key.encrypt(HandShake._get_random_bytes(
+                              payload=self._remote_host_key._encrypt(HandShake._get_random_bytes(
                                   HandShake.RANDOM_NUMBER_LEN) + self._hash_pass, HandShake.RSA_PADDING))
 
     def _get_secret_message(self) -> UDPMessage:
@@ -159,9 +159,9 @@ class HandShake:
         """
         if self._remote_host_key is not None:
             return UDPMessage(msg_id=HandShake.PUT_SECRET_MESSAGE_TOPIC,
-                              payload=self._remote_host_key.encrypt(HandShake._get_random_bytes(
+                              payload=self._remote_host_key._encrypt(HandShake._get_random_bytes(
                                   HandShake.RANDOM_NUMBER_LEN) + self._secret,
-                                                                    HandShake.RSA_PADDING))
+                                                                     HandShake.RSA_PADDING))
 
     @staticmethod
     def _get_random_bytes(n_bytes: int) -> bytes:

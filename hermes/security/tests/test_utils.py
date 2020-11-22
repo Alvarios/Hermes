@@ -1,6 +1,8 @@
-from hermes.security.utils import verify_password_scrypt, derive_password_scrypt
+from hermes.security.utils import verify_password_scrypt, derive_password_scrypt, derive_key_hkdf
 import os
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 
 def test_verify_password_scrypt_return_true_if_given_password_is_correct_and_derived_with_scrypt():
@@ -70,6 +72,40 @@ def test_derive_password_scrypt_correctly_derive_a_password_with_scrypt():
 
     # When
     result = derive_password_scrypt(password_to_derive, password_salt)
+
+    # Then
+    assert result == expected_result
+
+
+def test_derive_key_hkdf_return_a_derived_key_of_correct_length():
+    # Given
+    expected_lengths = [2, 4, 8, 16, 32, 64]
+    key_to_derive = b"01234567890123456789012346789012345678912345678"
+    # When
+    results = [derive_key_hkdf(key=key_to_derive, length=length) for length in expected_lengths]
+
+    # Then
+    for result_length in zip(results, expected_lengths):
+        assert len(result_length[0]) == result_length[1]
+
+
+def test_derive_key_hkdf_return_exactly_the_same_key_than_hkdf_derivation_if_same_input():
+    # Given
+    algorithm = hashes.SHA3_256()
+    length = 32
+    salt = b''
+    info = b"test"
+    key_to_derive = b"01234567890123456789012346789012345678912345678"
+
+    expected_result = HKDF(
+        algorithm=algorithm,
+        length=length,
+        salt=salt,
+        info=info,
+    ).derive(key_to_derive)
+
+    # When
+    result = derive_key_hkdf(key=key_to_derive, length=length, salt=salt, info=info, algorithm=algorithm)
 
     # Then
     assert result == expected_result

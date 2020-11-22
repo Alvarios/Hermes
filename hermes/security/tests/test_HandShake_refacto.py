@@ -29,7 +29,7 @@ def test_hand_shake_verify_password_return_true_if_given_password_is_correct_and
 
     server = HandShake(role=role, derived_password=derived_password, password_salt=password_salt)
     # When
-    result = server.verify_password(password_to_verify=password_to_verify)
+    result = server._verify_password(password_to_verify=password_to_verify)
 
     # Then
     assert result == expected_result
@@ -56,7 +56,7 @@ def test_hand_shake_verify_password_return_false_if_given_password_is_incorrect_
 
     server = HandShake(role=role, derived_password=derived_password, password_salt=password_salt)
     # When
-    result = server.verify_password(password_to_verify=password_to_verify)
+    result = server._verify_password(password_to_verify=password_to_verify)
 
     # Then
     assert result == expected_result
@@ -72,7 +72,7 @@ def test_hand_shake_verify_password_return_true_in_any_cas_if_no_derived_passwor
 
     server = HandShake(role=role, derived_password=derived_password)
     # When
-    results = [server.verify_password(password_to_verify=password) for password in passwords_to_verify]
+    results = [server._verify_password(password_to_verify=password) for password in passwords_to_verify]
 
     # Then
     for result in results:
@@ -194,4 +194,127 @@ def test_next_message_return_authentication_required_message_when_connection_ste
     # Then
     assert result.msg_id == expected_message.msg_id
     assert result.topic == expected_message.topic
+
+
+def test_decrypt_can_decrypt_messages_encrypted_with_encrypt_when_connection_step_4_for_both_roles():
+    # Given
+    msg_to_encrypt = b"A very secret message"
+    password_to_derive = b"test"
+    password_salt = os.urandom(16)
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    client = HandShake(role=HandShake.CLIENT, password_salt=password_salt, derived_password=derived_password)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    # When
+
+    encrypt_server = server._encrypt(data=msg_to_encrypt)
+    encrypt_client = client._encrypt(data=msg_to_encrypt)
+    decrypted_server = server._decrypt(encrypt_server)
+    decrypted_client = client._decrypt(encrypt_client)
+
+    # Then
+    assert decrypted_client == decrypted_server == msg_to_encrypt
+
+
+def test_encrypt_return_different_bytes_than_input_when_connection_step_4_for_both_roles():
+    # Given
+    msg_to_encrypt = b"A very secret message"
+    password_salt = os.urandom(16)
+    password_to_derive = b"test"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    client = HandShake(role=HandShake.CLIENT, password_salt=password_salt, derived_password=derived_password)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    # When
+
+    encrypt_server = server._encrypt(data=msg_to_encrypt)
+    encrypt_client = client._encrypt(data=msg_to_encrypt)
+
+    # Then
+    assert encrypt_client != msg_to_encrypt
+    assert encrypt_server != msg_to_encrypt
+
+
+def test_next_message_return_authentication_message_when_connection_step_4_and_role_is_client_with_password():
+    # Given
+    password_to_derive = b"test"
+    password_salt = os.urandom(16)
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+
+    expected_id = codes.HANDSHAKE
+    expected_topic = HandShake.AUTHENTICATION_TOPIC
+
+    # When
+    result = client.next_message()
+
+    # Then
+    assert int.from_bytes(result.msg_id, 'little') == expected_id
+    assert int.from_bytes(result.topic, 'little') == expected_topic
+
+    assert server._decrypt(result.payload) == password_to_derive
+
+
+def test_next_message_return_connection_approved_message_when_connection_step_6_and_role_is_server_and_password_ok():
+    # Given
+    password_salt = os.urandom(16)
+    password_to_derive = b"test"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_to_derive)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+
+    expected_id = codes.HANDSHAKE
+    expected_topic = HandShake.CONNECTION_APPROVED_TOPIC
+
+    # When
+    result = server.next_message()
+
+    # Then
+    assert int.from_bytes(result.msg_id, 'little') == expected_id
+    assert int.from_bytes(result.topic, 'little') == expected_topic
+
+
+def test_next_message_return_connection_failed_msg_when_connection_step_6_and_role_is_client_and_password_incorrect():
+    # Given
+    password_salt = os.urandom(16)
+    password_to_derive = b"test"
+    password_client = b"incorrect"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_client)
+
+    expected_id = codes.HANDSHAKE
+    expected_topic = HandShake.CONNECTION_FAILED_TOPIC
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+
+    # When
+    result = server.next_message()
+
+    # Then
+    assert int.from_bytes(result.msg_id, 'little') == expected_id
+    assert int.from_bytes(result.topic, 'little') == expected_topic
+
 # python -m pytest -s hermes/security/tests/test_HandShake_refacto.py -vv
