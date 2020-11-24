@@ -359,4 +359,84 @@ def test_authentication_required_message_contain_a_list_of_authentication_method
     assert len(result[HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME]) > 0
     assert result[HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME] == HandShake.AUTHENTICATION_METHODS_AVAILABLE
 
+
+def test_get_status_return_incomplete_when_role_is_client_and_handshake_process_not_started():
+    # Given
+    role = HandShake.CLIENT
+    client = HandShake(role=role)
+
+    # When
+    result = client.get_status()
+
+    # Then
+    assert result == HandShake.CONNECTION_STATUS_INCOMPLETE
+
+
+def test_get_status_return_complete_when_and_handshake_was_successful_without_authentication():
+    # Given
+    server = HandShake(role=HandShake.SERVER)
+    client = HandShake(role=HandShake.CLIENT)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+
+    # When
+    result_client = client.get_status()
+    result_server = server.get_status()
+
+    # Then
+    assert result_client == HandShake.CONNECTION_STATUS_APPROVED
+    assert result_server == HandShake.CONNECTION_STATUS_APPROVED
+
+
+def test_get_status_return_failed_when_authentication_is_incorrect():
+    # Given
+    password_to_derive = b"test"
+    password_salt = os.urandom(16)
+    password_client = b"incorrect"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_client)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+
+    # When
+    result_client = client.get_status()
+    result_server = server.get_status()
+
+    # Then
+    assert result_client == HandShake.CONNECTION_STATUS_FAILED
+    assert result_server == HandShake.CONNECTION_STATUS_FAILED
+
+
+def test_get_status_return_approved_when_authentication_is_correct():
+    # Given
+    password_to_derive = b"test"
+    password_salt = os.urandom(16)
+    password_client = b"test"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_client)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+
+    # When
+    result_client = client.get_status()
+    result_server = server.get_status()
+
+    # Then
+    assert result_client == HandShake.CONNECTION_STATUS_APPROVED
+    assert result_server == HandShake.CONNECTION_STATUS_APPROVED
 # python -m pytest -s hermes/security/tests/test_HandShake_refacto.py -vv

@@ -91,6 +91,10 @@ class HandShake:
             AUTHENTICATION_TOPIC : UDPMessage topic used to inform the message contain the authentication information..
             NONCE_LENGTH : The length of nonce used for encryption.
 
+            CONNECTION_STATUS_INCOMPLETE : The label used for incomplete handshake status.
+            CONNECTION_STATUS_APPROVED : The label used for approved handshake status.
+            CONNECTION_STATUS_FAILED : The label used for failed handshake status.
+
         Attributes :
             role : The role of the current HandShake (client or server).
             _derived_password : Only required for role server. The derived password used for authentication (if set
@@ -102,6 +106,7 @@ class HandShake:
             _private_key : Stores the ephemeral private key used for handshake.
             _symmetric_encryption_key : The key used for symmetric encryption (needed for secure authentication).
             _authentication_approved : Boolean that is set to True if the authentication is successful.
+            _connection_status : Store the status of the handshake.
     """
 
     SERVER = "server"
@@ -122,6 +127,10 @@ class HandShake:
     AUTHENTICATION_TOPIC = 6
 
     NONCE_LENGTH = 12
+
+    CONNECTION_STATUS_INCOMPLETE = "incomplete"
+    CONNECTION_STATUS_APPROVED = "approved"
+    CONNECTION_STATUS_FAILED = "failed"
 
     def __init__(self, role: Optional[str] = SERVER, derived_password: Optional[Union[None, bytes]] = None,
                  password_salt: Optional[Union[None, bytes]] = None, authentication_information=None) -> None:
@@ -144,6 +153,7 @@ class HandShake:
         self._symmetric_encryption_key = None
         self._authentication_information = authentication_information
         self._authentication_approved = False
+        self._connection_status = HandShake.CONNECTION_STATUS_INCOMPLETE
 
     def _verify_password(self, password_to_verify: bytes) -> bool:
         """Check if the input password correspond to the instance derived password and salt.
@@ -170,6 +180,8 @@ class HandShake:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CLIENT_KEY_SHARE_TOPIC,
                                   payload=public_bytes)
             if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
+                # TODO : Add random bytes to add noise.
+                # TODO : Send authentication information as a dict
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC,
                                   payload=self._encrypt(self._authentication_information))
             payload = str.encode(json.dumps({HandShake.PROTOCOLS_AVAILABLE_KEY_NAME: HandShake.PROTOCOLS_AVAILABLE}),
@@ -184,17 +196,20 @@ class HandShake:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC,
                                   payload=public_bytes)
             if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is None:
+                self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
             # If authentication is required
             if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is not None:
                 payload = str.encode(json.dumps(
                     {HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME: HandShake.AUTHENTICATION_METHODS_AVAILABLE}),
-                                     "utf8")
+                    "utf8")
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC,
                                   payload=payload)
             if self._last_step == HandShake.AUTHENTICATION_TOPIC and self._derived_password is not None:
                 if self._authentication_approved:
+                    self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
                     return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
+                self._connection_status = HandShake.CONNECTION_STATUS_FAILED
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
             return None
 
@@ -222,6 +237,10 @@ class HandShake:
         if msg_topic == HandShake.AUTHENTICATION_TOPIC:
             self._last_step = msg_topic
             self._authentication_approved = self._verify_password(self._decrypt(msg.payload))
+        if msg_topic == HandShake.CONNECTION_APPROVED_TOPIC:
+            self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
+        if msg_topic == HandShake.CONNECTION_FAILED_TOPIC:
+            self._connection_status = HandShake.CONNECTION_STATUS_FAILED
 
     def get_shared_key(self) -> bytes:
         """Return the resulting key after Diffie-Hellman key exchange.
@@ -251,3 +270,10 @@ class HandShake:
         chacha = ChaCha20Poly1305(self._symmetric_encryption_key)
         return chacha.decrypt(encrypted_message[:HandShake.NONCE_LENGTH], encrypted_message[HandShake.NONCE_LENGTH:],
                               b"")
+
+    def get_status(self) -> str:
+        """Return the current status of the HandShake.
+
+        :return: The current status of the instance.
+        """
+        return self._connection_status
