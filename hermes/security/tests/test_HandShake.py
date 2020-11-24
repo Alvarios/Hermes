@@ -1,4 +1,4 @@
-from hermes.security.HandShake_refacto import HandShake
+from hermes.security.HandShake import HandShake
 import os
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from hermes.messages.UDPMessage import UDPMessage
@@ -439,4 +439,4 @@ def test_get_status_return_approved_when_authentication_is_correct():
     # Then
     assert result_client == HandShake.CONNECTION_STATUS_APPROVED
     assert result_server == HandShake.CONNECTION_STATUS_APPROVED
-# python -m pytest -s hermes/security/tests/test_HandShake_refacto.py -vv
+# python -m pytest -s hermes/security/tests/test_HandShake.py -vv
