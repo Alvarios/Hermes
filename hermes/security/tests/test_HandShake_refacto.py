@@ -6,6 +6,7 @@ import hermes.messages.codes as codes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from hermes.security.utils import derive_password_scrypt
+import json
 
 
 def test_hand_shake_verify_password_return_true_if_given_password_is_correct_and_role_is_server():
@@ -83,15 +84,15 @@ def test_next_message_returns_correct_message_when_connection_request_begins_and
     # Given
     role = HandShake.CLIENT
     client = HandShake(role=role)
-    expected_message = UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC)
+    expected_id = codes.HANDSHAKE
+    expected_topic = HandShake.CONNECTION_REQUEST_TOPIC
 
     # When
     result = client.next_message()
 
     # Then
-    assert result.payload == expected_message.payload
-    assert result.msg_id == expected_message.msg_id
-    assert result.topic == expected_message.topic
+    assert int.from_bytes(result.msg_id, 'little') == expected_id
+    assert int.from_bytes(result.topic, 'little') == expected_topic
 
 
 def test_next_message_returns_none_when_no_connection_request_and_cm_is_server():
@@ -316,5 +317,46 @@ def test_next_message_return_connection_failed_msg_when_connection_step_6_and_ro
     # Then
     assert int.from_bytes(result.msg_id, 'little') == expected_id
     assert int.from_bytes(result.topic, 'little') == expected_topic
+
+
+def test_connection_request_message_contains_a_list_of_available_protocols():
+    # Given
+    role = HandShake.CLIENT
+    client = HandShake(role=role)
+    expected_message = UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC)
+    connection_request_message = client.next_message()
+
+    # When
+    result = json.loads(bytes.decode(connection_request_message.payload, "utf8"))
+
+    # Then
+    assert HandShake.PROTOCOLS_AVAILABLE_KEY_NAME in result.keys()
+    assert type(result[HandShake.PROTOCOLS_AVAILABLE_KEY_NAME]) is list
+    assert len(result[HandShake.PROTOCOLS_AVAILABLE_KEY_NAME]) > 0
+    assert result[HandShake.PROTOCOLS_AVAILABLE_KEY_NAME][0] == "1.0"
+    assert result[HandShake.PROTOCOLS_AVAILABLE_KEY_NAME] == HandShake.PROTOCOLS_AVAILABLE
+
+
+def test_authentication_required_message_contain_a_list_of_authentication_methods_available():
+    # Given
+    password_to_derive = b"test"
+    password_salt = os.urandom(16)
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    client = HandShake(role=HandShake.CLIENT, password_salt=password_salt, derived_password=derived_password)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    authentication_required_message = server.next_message()
+
+    # When
+    result = json.loads(bytes.decode(authentication_required_message.payload, "utf8"))
+
+    # Then
+    assert HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME in result.keys()
+    assert type(result[HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME]) is list
+    assert len(result[HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME]) > 0
+    assert result[HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME] == HandShake.AUTHENTICATION_METHODS_AVAILABLE
 
 # python -m pytest -s hermes/security/tests/test_HandShake_refacto.py -vv

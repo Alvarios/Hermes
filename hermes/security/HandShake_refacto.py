@@ -40,6 +40,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from hermes.security.utils import verify_password_scrypt, derive_key_hkdf
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 import os
+import json
 
 
 class HandShake:
@@ -70,6 +71,16 @@ class HandShake:
             SERVER : Value that tell the HandShake role is server.
             CLIENT : Value that tell the HandShake role is client.
 
+            PROTOCOLS_AVAILABLE_KEY_NAME : The key name for protocols available used for metadata.
+            AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME : The key name for authentication method available used *
+            for metadata.
+
+            PROTOCOLS_AVAILABLE : A list of protocol version available for the handshake. The newest version of protocol
+            available for both device will be used for the handshake.
+            AUTHENTICATION_METHODS_AVAILABLE : A list of authentication methods available for the handshake's
+            authentication step. The client must use a method in this list to do authentication or send connection
+            failed message.
+
             CONNECTION_FAILED_TOPIC : UDPMessage topic used to inform connection failed.
             CONNECTION_REQUEST_TOPIC : UDPMessage topic used to inform a client want to create a connection.
             SERVER_KEY_SHARE_TOPIC : UDPMessage topic used to inform the server has send its public key.
@@ -95,6 +106,12 @@ class HandShake:
 
     SERVER = "server"
     CLIENT = "client"
+
+    PROTOCOLS_AVAILABLE_KEY_NAME = "protocols_available"
+    AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME = "authentication_methods_available"
+
+    PROTOCOLS_AVAILABLE = ["1.0"]
+    AUTHENTICATION_METHODS_AVAILABLE = ["password"]
 
     CONNECTION_FAILED_TOPIC = 0
     CONNECTION_REQUEST_TOPIC = 1
@@ -146,7 +163,6 @@ class HandShake:
         :return next_message: A UDPMessage to send to remote host to continue handshake process.
         """
         if self.role == HandShake.CLIENT:
-            # TODO: Add all protocol version available in payload when connection request.
             if self._last_step == HandShake.SERVER_KEY_SHARE_TOPIC:
                 public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
                                                                            format=serialization.PublicFormat.
@@ -156,7 +172,9 @@ class HandShake:
             if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC,
                                   payload=self._encrypt(self._authentication_information))
-            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC)
+            payload = str.encode(json.dumps({HandShake.PROTOCOLS_AVAILABLE_KEY_NAME: HandShake.PROTOCOLS_AVAILABLE}),
+                                 "utf8")
+            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC, payload=payload)
 
         if self.role == HandShake.SERVER:
             if self._last_step == HandShake.CONNECTION_REQUEST_TOPIC:
@@ -167,8 +185,13 @@ class HandShake:
                                   payload=public_bytes)
             if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is None:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
+            # If authentication is required
             if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is not None:
-                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC)
+                payload = str.encode(json.dumps(
+                    {HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME: HandShake.AUTHENTICATION_METHODS_AVAILABLE}),
+                                     "utf8")
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC,
+                                  payload=payload)
             if self._last_step == HandShake.AUTHENTICATION_TOPIC and self._derived_password is not None:
                 if self._authentication_approved:
                     return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
