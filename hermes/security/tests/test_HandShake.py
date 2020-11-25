@@ -7,6 +7,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from hermes.security.utils import derive_password_scrypt
 import json
+import pytest
 
 
 def test_hand_shake_verify_password_return_true_if_given_password_is_correct_and_role_is_server():
@@ -112,17 +113,19 @@ def test_next_message_return_a_message_with_an_ec_public_key_when_connection_ste
     # Given
     server = HandShake(role=HandShake.SERVER)
     client = HandShake(role=HandShake.CLIENT)
-    expected_result_payload = server._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                            format=serialization.PublicFormat.
-                                                                            SubjectPublicKeyInfo)
+    expected_result_pub_key = bytes.decode(
+        server._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                      format=serialization.PublicFormat.
+                                                      SubjectPublicKeyInfo), "ascii")
     server.add_message(client.next_message())
     # When
     result = server.next_message()
+    result_payload = json.loads(bytes.decode(result.payload, "utf8"))
 
     # Then
     assert int.from_bytes(result.msg_id, 'little') == codes.HANDSHAKE
     assert int.from_bytes(result.topic, 'little') == HandShake.SERVER_KEY_SHARE_TOPIC
-    assert result.payload == expected_result_payload
+    assert result_payload[HandShake.SERVER_PUBLIC_KEY_KEY_NAME] == expected_result_pub_key
 
 
 def test_next_message_return_a_message_with_an_ec_public_key_when_connection_step_3_and_role_is_client():
@@ -330,11 +333,11 @@ def test_connection_request_message_contains_a_list_of_available_protocols():
     result = json.loads(bytes.decode(connection_request_message.payload, "utf8"))
 
     # Then
-    assert HandShake.PROTOCOLS_AVAILABLE_KEY_NAME in result.keys()
-    assert type(result[HandShake.PROTOCOLS_AVAILABLE_KEY_NAME]) is list
-    assert len(result[HandShake.PROTOCOLS_AVAILABLE_KEY_NAME]) > 0
-    assert result[HandShake.PROTOCOLS_AVAILABLE_KEY_NAME][0] == "1.0"
-    assert result[HandShake.PROTOCOLS_AVAILABLE_KEY_NAME] == HandShake.PROTOCOLS_AVAILABLE
+    assert HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME in result.keys()
+    assert type(result[HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME]) is list
+    assert len(result[HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME]) > 0
+    assert result[HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME][0] == "alpha"
+    assert result[HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME] == HandShake.PROTOCOL_VERSIONS_AVAILABLE
 
 
 def test_authentication_required_message_contain_a_list_of_authentication_methods_available():
@@ -439,4 +442,137 @@ def test_get_status_return_approved_when_authentication_is_correct():
     # Then
     assert result_client == HandShake.CONNECTION_STATUS_APPROVED
     assert result_server == HandShake.CONNECTION_STATUS_APPROVED
+
+
+def test_server_key_share_message_contain_selected_protocol_version_which_is_the_latest_available():
+    # Given
+    server = HandShake(role=HandShake.SERVER)
+    client = HandShake(role=HandShake.CLIENT)
+
+    server.add_message(client.next_message())
+    server_key_share_message = server.next_message()
+
+    # When
+    result = json.loads(bytes.decode(server_key_share_message.payload, "utf8"))
+
+    # Then
+    assert HandShake.SELECTED_PROTOCOL_VERSION_KEY_NAME in result.keys()
+    assert result[HandShake.SELECTED_PROTOCOL_VERSION_KEY_NAME] == HandShake.PROTOCOL_VERSIONS_AVAILABLE[-1]
+
+
+def test_allowed_protocols_versions_can_be_defined_to_only_1_dot_0_when_handshake_is_created():
+    # Given
+    allowed_protocol_versions = ['1.0']
+    server = HandShake(role=HandShake.SERVER, allowed_protocol_versions=allowed_protocol_versions)
+
+    # When
+    result = server.get_allowed_protocol_versions()
+
+    # Then
+    assert result == allowed_protocol_versions
+
+
+def test_allowed_protocols_versions_can_be_defined_to_only_alpha_when_handshake_is_created():
+    # Given
+    allowed_protocol_versions = ['alpha']
+    server = HandShake(role=HandShake.SERVER, allowed_protocol_versions=allowed_protocol_versions)
+
+    # When
+    result = server.get_allowed_protocol_versions()
+
+    # Then
+    assert result == allowed_protocol_versions
+
+
+def test_allowed_protocols_versions_default_value_is_all_available_protocol_versions():
+    # Given
+    server = HandShake(role=HandShake.SERVER)
+
+    # When
+    result = server.get_allowed_protocol_versions()
+
+    # Then
+    assert result == HandShake.PROTOCOL_VERSIONS_AVAILABLE
+
+
+def test_handshake_raise_value_error_if_a_version_label_provided_does_not_exist():
+    # Given
+    allowed_protocol_versions = ['alpha', 'test_version_that_does_not_exist']
+
+    # When
+
+    # Then
+    with pytest.raises(ValueError):
+        server = HandShake(role=HandShake.SERVER, allowed_protocol_versions=allowed_protocol_versions)
+
+
+def test_server_key_share_message_inform_selected_protocol_is_alpha_if_it_is_the_only_available_for_client():
+    # Given
+    allowed_protocol_versions = ['alpha']
+    expected_result = "alpha"
+    server = HandShake(role=HandShake.SERVER)
+    client = HandShake(role=HandShake.CLIENT, allowed_protocol_versions=allowed_protocol_versions)
+
+    server.add_message(client.next_message())
+    server_key_share_message = server.next_message()
+
+    # When
+    result = json.loads(bytes.decode(server_key_share_message.payload, "utf8"))
+
+    # Then
+    assert result[HandShake.SELECTED_PROTOCOL_VERSION_KEY_NAME] == expected_result
+
+
+def test_server_key_share_message_inform_selected_protocol_is_1_dot_0_if_clients_allowed_protocol_not_sorted():
+    # Given
+    allowed_protocol_versions = ['1.0', 'alpha']
+    expected_result = "1.0"
+    server = HandShake(role=HandShake.SERVER)
+    client = HandShake(role=HandShake.CLIENT, allowed_protocol_versions=allowed_protocol_versions)
+
+    server.add_message(client.next_message())
+    server_key_share_message = server.next_message()
+
+    # When
+    result = json.loads(bytes.decode(server_key_share_message.payload, "utf8"))
+
+    # Then
+    assert result[HandShake.SELECTED_PROTOCOL_VERSION_KEY_NAME] == expected_result
+
+
+def test_server_key_share_message_inform_selected_protocol_is_alpha_if_it_is_the_only_available_for_server():
+    # Given
+    allowed_protocol_versions = ['alpha']
+    expected_result = "alpha"
+    server = HandShake(role=HandShake.SERVER, allowed_protocol_versions=allowed_protocol_versions)
+    client = HandShake(role=HandShake.CLIENT)
+
+    server.add_message(client.next_message())
+    server_key_share_message = server.next_message()
+
+    # When
+    result = json.loads(bytes.decode(server_key_share_message.payload, "utf8"))
+
+    # Then
+    assert result[HandShake.SELECTED_PROTOCOL_VERSION_KEY_NAME] == expected_result
+
+
+def test_connection_fail_if_server_and_client_have_not_a_common_protocol_version():
+    # Given
+    allowed_protocol_versions_client = ['alpha']
+    allowed_protocol_versions_server = ['1.0']
+    server = HandShake(role=HandShake.SERVER, allowed_protocol_versions=allowed_protocol_versions_server)
+    client = HandShake(role=HandShake.CLIENT, allowed_protocol_versions=allowed_protocol_versions_client)
+
+    server.add_message(client.next_message())
+
+    # When
+    connection_failed_message = server.next_message()
+    client.add_message(connection_failed_message)
+
+    # Then
+    assert server.get_status() == HandShake.CONNECTION_STATUS_FAILED
+    assert client.get_status() == HandShake.CONNECTION_STATUS_FAILED
+    assert int.from_bytes(connection_failed_message.topic, 'little') == HandShake.CONNECTION_FAILED_TOPIC
+
 # python -m pytest -s hermes/security/tests/test_HandShake.py -vv

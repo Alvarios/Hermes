@@ -71,11 +71,16 @@ class HandShake:
             SERVER : Value that tell the HandShake role is server.
             CLIENT : Value that tell the HandShake role is client.
 
-            PROTOCOLS_AVAILABLE_KEY_NAME : The key name for protocols available used for metadata.
-            AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME : The key name for authentication method available used *
+            PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME : The key name for protocols available used for metadata.
+            SELECTED_PROTOCOL_VERSION_KEY_NAME : The key name used to specify which protocol will be used for the
+            handshake in the metadata.
+            SERVER_PUBLIC_KEY_KEY_NAME : The key name used for server public key.
+            AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME : The key name for authentication method available used
             for metadata.
+            SELECTED_AUTHENTICATION_METHOD_KEY_NAME : The key name used to specify which authentication method will be
+             used for the handshake in the metadata.
 
-            PROTOCOLS_AVAILABLE : A list of protocol version available for the handshake. The newest version of protocol
+            PROTOCOL_VERSIONS_AVAILABLE : A list of protocol version available for the handshake. The newest version of protocol
             available for both device will be used for the handshake.
             AUTHENTICATION_METHODS_AVAILABLE : A list of authentication methods available for the handshake's
             authentication step. The client must use a method in this list to do authentication or send connection
@@ -107,15 +112,21 @@ class HandShake:
             _symmetric_encryption_key : The key used for symmetric encryption (needed for secure authentication).
             _authentication_approved : Boolean that is set to True if the authentication is successful.
             _connection_status : Store the status of the handshake.
+            _allowed_protocol_versions : Store a list of allowed protocol versions.
+            _client_protocol_versions : A list of all client's protocol versions available.
     """
 
     SERVER = "server"
     CLIENT = "client"
 
-    PROTOCOLS_AVAILABLE_KEY_NAME = "protocols_available"
+    PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME = "protocols_available"
+    SELECTED_PROTOCOL_VERSION_KEY_NAME = "selected_protocol_version"
+    SERVER_PUBLIC_KEY_KEY_NAME = "server_public_key"
     AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME = "authentication_methods_available"
+    SELECTED_AUTHENTICATION_METHOD_KEY_NAME = "selected_authentication_method"
 
-    PROTOCOLS_AVAILABLE = ["1.0"]
+    PROTOCOL_VERSIONS_AVAILABLE = ["alpha", "1.0"]
+    # TODO: Add a method to chose which authentication methods the HandShake instance will use.
     AUTHENTICATION_METHODS_AVAILABLE = ["password"]
 
     CONNECTION_FAILED_TOPIC = 0
@@ -133,7 +144,8 @@ class HandShake:
     CONNECTION_STATUS_FAILED = "failed"
 
     def __init__(self, role: Optional[str] = SERVER, derived_password: Optional[Union[None, bytes]] = None,
-                 password_salt: Optional[Union[None, bytes]] = None, authentication_information=None) -> None:
+                 password_salt: Optional[Union[None, bytes]] = None, authentication_information=None,
+                 allowed_protocol_versions: Optional[Union[None, list]] = None) -> None:
         """Create a new HandShake object with given parameter.
 
         :param role: The role of the current HandShake (client or server).
@@ -144,6 +156,10 @@ class HandShake:
         :param authentication_information :  Only required for role client. The information used by client
         for authentication.
         """
+        # TODO : manage error when received message is corrupted.
+        # TODO : Manage error when received message format is incorrect.
+        # TODO : Add time creation.
+        # TODO : Add abort method.
         self.role = role
         self._derived_password = derived_password
         self._password_salt = password_salt
@@ -154,6 +170,13 @@ class HandShake:
         self._authentication_information = authentication_information
         self._authentication_approved = False
         self._connection_status = HandShake.CONNECTION_STATUS_INCOMPLETE
+        if allowed_protocol_versions is None:
+            allowed_protocol_versions = HandShake.PROTOCOL_VERSIONS_AVAILABLE
+        if not all(i in HandShake.PROTOCOL_VERSIONS_AVAILABLE for i in allowed_protocol_versions):
+            raise ValueError("All allowed protocol versions must be present in HandShake.PROTOCOL_VERSIONS_AVAILABLE.")
+        self._allowed_protocol_versions = [version for version in HandShake.PROTOCOL_VERSIONS_AVAILABLE if
+                                           version in allowed_protocol_versions]
+        self._client_protocol_versions = None
 
     def _verify_password(self, password_to_verify: bytes) -> bool:
         """Check if the input password correspond to the instance derived password and salt.
@@ -174,6 +197,7 @@ class HandShake:
         """
         if self.role == HandShake.CLIENT:
             if self._last_step == HandShake.SERVER_KEY_SHARE_TOPIC:
+                # TODO : Change this message into json.
                 public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
                                                                            format=serialization.PublicFormat.
                                                                            SubjectPublicKeyInfo)
@@ -181,20 +205,36 @@ class HandShake:
                                   payload=public_bytes)
             if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
                 # TODO : Add random bytes to add noise.
-                # TODO : Send authentication information as a dict
+                # TODO : Send authentication information as a dict.
+                # TODO : Send which authentication method the client will use.
+                # TODO : Send connection failed when the client cannot provide authentication information.
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC,
                                   payload=self._encrypt(self._authentication_information))
-            payload = str.encode(json.dumps({HandShake.PROTOCOLS_AVAILABLE_KEY_NAME: HandShake.PROTOCOLS_AVAILABLE}),
-                                 "utf8")
+            payload = str.encode(
+                json.dumps({HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME: self._allowed_protocol_versions}),
+                "utf8")
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC, payload=payload)
 
         if self.role == HandShake.SERVER:
             if self._last_step == HandShake.CONNECTION_REQUEST_TOPIC:
-                public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                           format=serialization.PublicFormat.
-                                                                           SubjectPublicKeyInfo)
-                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC,
-                                  payload=public_bytes)
+                public_bytes = bytes.decode(
+                    self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                format=serialization.PublicFormat.
+                                                                SubjectPublicKeyInfo), "ascii")
+                protocol_version = ""
+                for version in self._client_protocol_versions:
+                    if version in self._allowed_protocol_versions:
+                        protocol_version = version
+                if protocol_version == "":
+                    self._connection_status = HandShake.CONNECTION_STATUS_FAILED
+                    return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
+                payload = str.encode(
+                    json.dumps({HandShake.SELECTED_PROTOCOL_VERSION_KEY_NAME: protocol_version,
+                                HandShake.SERVER_PUBLIC_KEY_KEY_NAME: public_bytes}),
+                    "utf8")
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC, payload=payload)
+                # return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC,
+                #                   payload=public_bytes)
             if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is None:
                 self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
@@ -223,10 +263,14 @@ class HandShake:
         if msg_id != codes.HANDSHAKE:
             return
         if msg_topic == HandShake.CONNECTION_REQUEST_TOPIC:
+            payload = json.loads(bytes.decode(msg.payload, "utf8"))
+            self._client_protocol_versions = payload[HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME]
             self._last_step = msg_topic
         if msg_topic == HandShake.SERVER_KEY_SHARE_TOPIC:
             self._last_step = msg_topic
-            self._peer_public_key = serialization.load_pem_public_key(msg.payload, )
+            payload = json.loads(bytes.decode(msg.payload, "utf8"))
+            self._peer_public_key = serialization.load_pem_public_key(
+                str.encode(payload[HandShake.SERVER_PUBLIC_KEY_KEY_NAME], 'ascii'))
             self._symmetric_encryption_key = derive_key_hkdf(key=self.get_shared_key(), length=32)
         if msg_topic == HandShake.CLIENT_KEY_SHARE_TOPIC:
             self._last_step = msg_topic
@@ -277,3 +321,6 @@ class HandShake:
         :return: The current status of the instance.
         """
         return self._connection_status
+
+    def get_allowed_protocol_versions(self):
+        return self._allowed_protocol_versions
