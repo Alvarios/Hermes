@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from hermes.security.utils import derive_password_scrypt
 import json
 import pytest
+import time
 
 
 def test_hand_shake_verify_password_return_true_if_given_password_is_correct_and_role_is_server():
@@ -575,4 +576,55 @@ def test_connection_fail_if_server_and_client_have_not_a_common_protocol_version
     assert client.get_status() == HandShake.CONNECTION_STATUS_FAILED
     assert int.from_bytes(connection_failed_message.topic, 'little') == HandShake.CONNECTION_FAILED_TOPIC
 
+
+def test_connection_fail_if_abort_is_called_on_server_after_a_connection_request():
+    # Given
+
+    server = HandShake(role=HandShake.SERVER)
+    client = HandShake(role=HandShake.CLIENT)
+
+    server.add_message(client.next_message())
+
+    # When
+    server.abort()
+    connection_failed_message = server.next_message()
+    client.add_message(connection_failed_message)
+
+    # Then
+    assert server.get_status() == HandShake.CONNECTION_STATUS_FAILED
+    assert client.get_status() == HandShake.CONNECTION_STATUS_FAILED
+    assert int.from_bytes(connection_failed_message.topic, 'little') == HandShake.CONNECTION_FAILED_TOPIC
+
+
+def test_connection_fail_if_abort_is_called_on_client_after_a_connection_request():
+    # Given
+    server = HandShake(role=HandShake.SERVER)
+    client = HandShake(role=HandShake.CLIENT)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+
+    # When
+    client.abort()
+    connection_failed_message = client.next_message()
+    server.add_message(connection_failed_message)
+
+    # Then
+    assert server.get_status() == HandShake.CONNECTION_STATUS_FAILED
+    assert client.get_status() == HandShake.CONNECTION_STATUS_FAILED
+    assert int.from_bytes(connection_failed_message.topic, 'little') == HandShake.CONNECTION_FAILED_TOPIC
+
+
+def test_time_creation_return_handshake_time_of_creation():
+    # Given
+    time_test_start = time.time()
+    time.sleep(.001)
+    client = HandShake(role=HandShake.CLIENT)
+    time.sleep(.001)
+
+    # When
+    result = client.time_creation()
+
+    # Then
+    assert time_test_start < client.time_creation() < time.time()
 # python -m pytest -s hermes/security/tests/test_HandShake.py -vv

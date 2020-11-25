@@ -32,7 +32,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 """
 
-from typing import Optional, Union, NoReturn
+from typing import Optional, Union, NoReturn, List
 from hermes.messages.UDPMessage import UDPMessage
 from cryptography.hazmat.primitives import serialization
 import hermes.messages.codes as codes
@@ -41,6 +41,7 @@ from hermes.security.utils import verify_password_scrypt, derive_key_hkdf
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 import os
 import json
+import time
 
 
 class HandShake:
@@ -158,8 +159,6 @@ class HandShake:
         """
         # TODO : manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
-        # TODO : Add time creation.
-        # TODO : Add abort method.
         self.role = role
         self._derived_password = derived_password
         self._password_salt = password_salt
@@ -177,6 +176,7 @@ class HandShake:
         self._allowed_protocol_versions = [version for version in HandShake.PROTOCOL_VERSIONS_AVAILABLE if
                                            version in allowed_protocol_versions]
         self._client_protocol_versions = None
+        self._time_creation = time.time()
 
     def _verify_password(self, password_to_verify: bytes) -> bool:
         """Check if the input password correspond to the instance derived password and salt.
@@ -195,6 +195,9 @@ class HandShake:
 
         :return next_message: A UDPMessage to send to remote host to continue handshake process.
         """
+        if self._connection_status == HandShake.CONNECTION_STATUS_FAILED:
+            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
+
         if self.role == HandShake.CLIENT:
             if self._last_step == HandShake.SERVER_KEY_SHARE_TOPIC:
                 # TODO : Change this message into json.
@@ -233,8 +236,6 @@ class HandShake:
                                 HandShake.SERVER_PUBLIC_KEY_KEY_NAME: public_bytes}),
                     "utf8")
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC, payload=payload)
-                # return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC,
-                #                   payload=public_bytes)
             if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is None:
                 self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
@@ -262,6 +263,8 @@ class HandShake:
         msg_topic = int.from_bytes(msg.topic, 'little')
         if msg_id != codes.HANDSHAKE:
             return
+        if msg_topic == HandShake.CONNECTION_FAILED_TOPIC:
+            self._connection_status = HandShake.CONNECTION_STATUS_FAILED
         if msg_topic == HandShake.CONNECTION_REQUEST_TOPIC:
             payload = json.loads(bytes.decode(msg.payload, "utf8"))
             self._client_protocol_versions = payload[HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME]
@@ -283,8 +286,6 @@ class HandShake:
             self._authentication_approved = self._verify_password(self._decrypt(msg.payload))
         if msg_topic == HandShake.CONNECTION_APPROVED_TOPIC:
             self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
-        if msg_topic == HandShake.CONNECTION_FAILED_TOPIC:
-            self._connection_status = HandShake.CONNECTION_STATUS_FAILED
 
     def get_shared_key(self) -> bytes:
         """Return the resulting key after Diffie-Hellman key exchange.
@@ -322,5 +323,20 @@ class HandShake:
         """
         return self._connection_status
 
-    def get_allowed_protocol_versions(self):
+    def get_allowed_protocol_versions(self) -> List[str]:
+        """Return the list of available protocol versions for this instance.
+
+        :return: The list of available protocol versions for this instance.
+        """
         return self._allowed_protocol_versions
+
+    def abort(self) -> NoReturn:
+        """Set the connection status to failed so next_message return connection failed message."""
+        self._connection_status = HandShake.CONNECTION_STATUS_FAILED
+
+    def time_creation(self) -> float:
+        """Return the time of creation of the instance.
+
+        :return: The time of creation of the instance.
+        """
+        return self._time_creation
