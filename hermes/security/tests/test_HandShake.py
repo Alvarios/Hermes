@@ -9,6 +9,7 @@ from hermes.security.utils import derive_password_scrypt
 import json
 import pytest
 import time
+import base64
 
 
 def test_hand_shake_verify_password_return_true_if_given_password_is_correct_and_role_is_server():
@@ -264,12 +265,14 @@ def test_next_message_return_authentication_message_when_connection_step_4_and_r
 
     # When
     result = client.next_message()
+    payload = json.loads(bytes.decode(result.payload, "utf8"))
+    password = base64.b64decode(str.encode(payload[HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY], 'ascii'))
 
     # Then
     assert int.from_bytes(result.msg_id, 'little') == expected_id
     assert int.from_bytes(result.topic, 'little') == expected_topic
 
-    assert server._decrypt(result.payload) == password_to_derive
+    assert server._decrypt(password) == password_to_derive
 
 
 def test_next_message_return_connection_approved_message_when_connection_step_6_and_role_is_server_and_password_ok():
@@ -627,4 +630,26 @@ def test_time_creation_return_handshake_time_of_creation():
 
     # Then
     assert time_test_start < client.time_creation() < time.time()
+
+
+def test_authentication_message_contain_the_selected_authentication_method_key():
+    # Given
+    password_salt = os.urandom(16)
+    password_to_derive = b"test_password"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_to_derive)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    authentication_message = client.next_message()
+
+    # When
+    result = json.loads(bytes.decode(authentication_message.payload, "utf8"))
+
+    # Then
+    assert HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME in result.keys()
+
 # python -m pytest -s hermes/security/tests/test_HandShake.py -vv

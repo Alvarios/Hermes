@@ -42,6 +42,7 @@ from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 import os
 import json
 import time
+import base64
 
 
 class HandShake:
@@ -81,11 +82,13 @@ class HandShake:
             SELECTED_AUTHENTICATION_METHOD_KEY_NAME : The key name used to specify which authentication method will be
              used for the handshake in the metadata.
 
-            PROTOCOL_VERSIONS_AVAILABLE : A list of protocol version available for the handshake. The newest version of protocol
-            available for both device will be used for the handshake.
+            PROTOCOL_VERSIONS_AVAILABLE : A list of protocol version available for the handshake. The newest version of
+            protocol available for both device will be used for the handshake.
             AUTHENTICATION_METHODS_AVAILABLE : A list of authentication methods available for the handshake's
             authentication step. The client must use a method in this list to do authentication or send connection
             failed message.
+
+            PASSWORD_AUTH_METHOD_PASSWORD_KEY : The key name used in password authentication method to provide password.
 
             CONNECTION_FAILED_TOPIC : UDPMessage topic used to inform connection failed.
             CONNECTION_REQUEST_TOPIC : UDPMessage topic used to inform a client want to create a connection.
@@ -130,6 +133,8 @@ class HandShake:
     # TODO: Add a method to chose which authentication methods the HandShake instance will use.
     AUTHENTICATION_METHODS_AVAILABLE = ["password"]
 
+    PASSWORD_AUTH_METHOD_PASSWORD_KEY = "password"
+
     CONNECTION_FAILED_TOPIC = 0
     CONNECTION_REQUEST_TOPIC = 1
     SERVER_KEY_SHARE_TOPIC = 2
@@ -167,6 +172,7 @@ class HandShake:
         self._private_key = ec.generate_private_key(ec.SECP384R1())
         self._symmetric_encryption_key = None
         self._authentication_information = authentication_information
+        # TODO : Check when authentication info is None
         self._authentication_approved = False
         self._connection_status = HandShake.CONNECTION_STATUS_INCOMPLETE
         if allowed_protocol_versions is None:
@@ -211,8 +217,14 @@ class HandShake:
                 # TODO : Send authentication information as a dict.
                 # TODO : Send which authentication method the client will use.
                 # TODO : Send connection failed when the client cannot provide authentication information.
-                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC,
-                                  payload=self._encrypt(self._authentication_information))
+                authentication_information = base64.b64encode(self._encrypt(self._authentication_information)).decode(
+                    "ascii")
+                payload = str.encode(json.dumps({HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: "",
+                                                 HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
+                                                     authentication_information}), "utf8")
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC, payload=payload)
+                # return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC,
+                #                   payload=self._encrypt(self._authentication_information))
             payload = str.encode(
                 json.dumps({HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME: self._allowed_protocol_versions}),
                 "utf8")
@@ -283,7 +295,9 @@ class HandShake:
             self._last_step = msg_topic
         if msg_topic == HandShake.AUTHENTICATION_TOPIC:
             self._last_step = msg_topic
-            self._authentication_approved = self._verify_password(self._decrypt(msg.payload))
+            payload = json.loads(bytes.decode(msg.payload, "utf8"))
+            password = base64.b64decode(str.encode(payload[HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY], 'ascii'))
+            self._authentication_approved = self._verify_password(self._decrypt(password))
         if msg_topic == HandShake.CONNECTION_APPROVED_TOPIC:
             self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
 
