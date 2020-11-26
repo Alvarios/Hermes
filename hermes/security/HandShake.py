@@ -118,6 +118,8 @@ class HandShake:
             _connection_status : Store the status of the handshake.
             _allowed_protocol_versions : Store a list of allowed protocol versions.
             _client_protocol_versions : A list of all client's protocol versions available.
+            _allowed_authentication_method : Store a list of allowed authentication method.
+            _time_creation : The creation time of the instance.
     """
 
     SERVER = "server"
@@ -130,8 +132,7 @@ class HandShake:
     SELECTED_AUTHENTICATION_METHOD_KEY_NAME = "selected_authentication_method"
 
     PROTOCOL_VERSIONS_AVAILABLE = ["alpha", "1.0"]
-    # TODO: Add a method to chose which authentication methods the HandShake instance will use.
-    AUTHENTICATION_METHODS_AVAILABLE = ["password"]
+    AUTHENTICATION_METHODS_AVAILABLE = ["password", "custom"]
 
     PASSWORD_AUTH_METHOD_PASSWORD_KEY = "password"
 
@@ -151,7 +152,8 @@ class HandShake:
 
     def __init__(self, role: Optional[str] = SERVER, derived_password: Optional[Union[None, bytes]] = None,
                  password_salt: Optional[Union[None, bytes]] = None, authentication_information=None,
-                 allowed_protocol_versions: Optional[Union[None, list]] = None) -> None:
+                 allowed_protocol_versions: Optional[Union[None, list]] = None,
+                 allowed_authentication_methods: Optional[Union[None, list]] = None) -> None:
         """Create a new HandShake object with given parameter.
 
         :param role: The role of the current HandShake (client or server).
@@ -161,6 +163,10 @@ class HandShake:
         derived_password as bytes.
         :param authentication_information :  Only required for role client. The information used by client
         for authentication.
+        :param allowed_protocol_versions: A list of allowed protocol versions. All elements in the list must be
+        in HandShake.PROTOCOL_VERSIONS_AVAILABLE.
+        :param allowed_protocol_versions: A list of allowed authentication method. All elements in the list must be
+        in HandShake.PROTOCOL_VERSIONS_AVAILABLE.
         """
         # TODO : manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
@@ -178,10 +184,15 @@ class HandShake:
         if allowed_protocol_versions is None:
             allowed_protocol_versions = HandShake.PROTOCOL_VERSIONS_AVAILABLE
         if not all(i in HandShake.PROTOCOL_VERSIONS_AVAILABLE for i in allowed_protocol_versions):
-            raise ValueError("All allowed protocol versions must be present in HandShake.PROTOCOL_VERSIONS_AVAILABLE.")
+            raise ValueError("All allowed protocol versions must be in HandShake.PROTOCOL_VERSIONS_AVAILABLE.")
         self._allowed_protocol_versions = [version for version in HandShake.PROTOCOL_VERSIONS_AVAILABLE if
                                            version in allowed_protocol_versions]
         self._client_protocol_versions = None
+        if allowed_authentication_methods is None:
+            allowed_authentication_methods = []
+        if not all(i in HandShake.AUTHENTICATION_METHODS_AVAILABLE for i in allowed_authentication_methods):
+            raise ValueError("All allowed authentication methods must be in HandShake.AUTHENTICATION_METHODS_AVAILABLE.")
+        self._allowed_authentication_methods = allowed_authentication_methods
         self._time_creation = time.time()
 
     def _verify_password(self, password_to_verify: bytes) -> bool:
@@ -248,11 +259,11 @@ class HandShake:
                                 HandShake.SERVER_PUBLIC_KEY_KEY_NAME: public_bytes}),
                     "utf8")
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC, payload=payload)
-            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is None:
+            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) == 0:
                 self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
             # If authentication is required
-            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and self._derived_password is not None:
+            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) != 0:
                 payload = str.encode(json.dumps(
                     {HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME: HandShake.AUTHENTICATION_METHODS_AVAILABLE}),
                     "utf8")
