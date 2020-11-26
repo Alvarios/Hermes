@@ -367,10 +367,10 @@ def test_authentication_required_message_contain_a_list_of_authentication_method
     password_to_derive = b"test"
     password_salt = os.urandom(16)
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
-    allowed_authentication_method = ["password"]
+    allowed_authentication_method = HandShake.AUTHENTICATION_METHODS_AVAILABLE
     server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_method,
                        password_salt=password_salt, derived_password=derived_password)
-    client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=allowed_authentication_method,
+    client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=["password"],
                        authentication_information=password_to_derive)
 
     server.add_message(client.next_message())
@@ -656,30 +656,6 @@ def test_time_creation_return_handshake_time_of_creation():
     assert time_test_start < client.time_creation() < time.time()
 
 
-def test_authentication_message_contain_the_selected_authentication_method_key():
-    # Given
-    password_salt = os.urandom(16)
-    password_to_derive = b"test_password"
-    allowed_authentication_methods = ["password"]
-    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
-    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
-                       allowed_authentication_methods=allowed_authentication_methods)
-    client = HandShake(role=HandShake.CLIENT, authentication_information=password_to_derive,
-                       allowed_authentication_methods=allowed_authentication_methods)
-
-    server.add_message(client.next_message())
-    client.add_message(server.next_message())
-    server.add_message(client.next_message())
-    client.add_message(server.next_message())
-    authentication_message = client.next_message()
-
-    # When
-    result = json.loads(bytes.decode(authentication_message.payload, "utf8"))
-
-    # Then
-    assert HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME in result.keys()
-
-
 def test_no_authentication_is_required_when_no_allowed_authentication_method_provided():
     # Given
     allowed_authentication_method = []
@@ -740,4 +716,100 @@ def test_handshake_raise_value_error_if_a_authentication_method_provided_does_no
     with pytest.raises(ValueError):
         server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_methods)
 
+
+def test_authentication_message_select_password_method_if_it_is_the_only_authentication_method_for_both_instances():
+    # Given
+    password_salt = os.urandom(16)
+    password_to_derive = b"test_password"
+    allowed_authentication_methods = ["password"]
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
+                       allowed_authentication_methods=allowed_authentication_methods)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_to_derive,
+                       allowed_authentication_methods=allowed_authentication_methods)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    authentication_message = client.next_message()
+
+    # When
+    result = json.loads(bytes.decode(authentication_message.payload, "utf8"))
+
+    # Then
+    assert HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME in result.keys()
+    assert result[HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME] == "password"
+
+
+def test_authentication_message_select_custom_method_if_it_is_the_only_authentication_method_for_both_instances():
+    # Given
+    password_salt = os.urandom(16)
+    password_to_derive = b"test_password"
+    allowed_authentication_methods = ["custom"]
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
+                       allowed_authentication_methods=allowed_authentication_methods)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_to_derive,
+                       allowed_authentication_methods=allowed_authentication_methods)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    authentication_message = client.next_message()
+
+    # When
+    result = json.loads(bytes.decode(authentication_message.payload, "utf8"))
+
+    # Then
+    assert result[HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME] == "custom"
+
+
+def test_client_next_message_is_connection_failed_if_no_authentication_method_available_after_auth_request():
+    # Given
+    password_salt = os.urandom(16)
+    password_to_derive = b"test_password"
+    allowed_authentication_methods_server = ["password"]
+    allowed_authentication_methods_client = []
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_to_derive,
+                       allowed_authentication_methods=allowed_authentication_methods_client)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
+                       allowed_authentication_methods=allowed_authentication_methods_server)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+
+    # When
+    connection_failed_message = client.next_message()
+
+    # Then
+    assert int.from_bytes(connection_failed_message.topic, 'little') == HandShake.CONNECTION_FAILED_TOPIC
+
+
+def test_client_next_message_is_connection_failed_if_no_common_authentication_method_auth_request():
+    # Given
+    allowed_authentication_methods_server = ["password"]
+    allowed_authentication_methods_client = ["custom"]
+    password_salt = os.urandom(16)
+    password_to_derive = b"test_password"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    client = HandShake(role=HandShake.CLIENT, authentication_information=password_to_derive,
+                       allowed_authentication_methods=allowed_authentication_methods_client)
+    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
+                       allowed_authentication_methods=allowed_authentication_methods_server)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+
+    # When
+    connection_failed_message = client.next_message()
+
+    # Then
+    assert int.from_bytes(connection_failed_message.topic, 'little') == HandShake.CONNECTION_FAILED_TOPIC
 # python -m pytest -s hermes/security/tests/test_HandShake.py -vv

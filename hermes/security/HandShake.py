@@ -119,6 +119,7 @@ class HandShake:
             _allowed_protocol_versions : Store a list of allowed protocol versions.
             _client_protocol_versions : A list of all client's protocol versions available.
             _allowed_authentication_method : Store a list of allowed authentication method.
+            _server_authentication_method : A list of all servers's authentication methods available.
             _time_creation : The creation time of the instance.
     """
 
@@ -168,6 +169,7 @@ class HandShake:
         :param allowed_protocol_versions: A list of allowed authentication method. All elements in the list must be
         in HandShake.PROTOCOL_VERSIONS_AVAILABLE.
         """
+        # TODO : Remove derived_password and password_salt parameters and use generic parameter instead.
         # TODO : manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
         self.role = role
@@ -191,9 +193,13 @@ class HandShake:
         if allowed_authentication_methods is None:
             allowed_authentication_methods = []
         if not all(i in HandShake.AUTHENTICATION_METHODS_AVAILABLE for i in allowed_authentication_methods):
-            raise ValueError("All allowed authentication methods must be in HandShake.AUTHENTICATION_METHODS_AVAILABLE.")
+            raise ValueError(
+                "All allowed authentication methods must be in HandShake.AUTHENTICATION_METHODS_AVAILABLE.")
         self._allowed_authentication_methods = allowed_authentication_methods
+        self._server_authentication_method = None
         self._time_creation = time.time()
+        if role is HandShake.CLIENT and len(allowed_authentication_methods) >= 2:
+            raise NotImplementedError("Multiple authentication method for client is not supported yet.")
 
     def _verify_password(self, password_to_verify: bytes) -> bool:
         """Check if the input password correspond to the instance derived password and salt.
@@ -225,17 +231,18 @@ class HandShake:
                                   payload=public_bytes)
             if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
                 # TODO : Add random bytes to add noise.
-                # TODO : Send authentication information as a dict.
-                # TODO : Send which authentication method the client will use.
-                # TODO : Send connection failed when the client cannot provide authentication information.
+                # TODO : Manage custom authentication method.
+                if len(self._allowed_authentication_methods) == 0 or self._allowed_authentication_methods[0] \
+                        not in self._server_authentication_method:
+                    return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
                 authentication_information = base64.b64encode(self._encrypt(self._authentication_information)).decode(
                     "ascii")
-                payload = str.encode(json.dumps({HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: "",
-                                                 HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
-                                                     authentication_information}), "utf8")
+                payload = str.encode(json.dumps(
+                    {HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._allowed_authentication_methods[0],
+                     HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
+                         authentication_information}), "utf8")
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC, payload=payload)
-                # return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC,
-                #                   payload=self._encrypt(self._authentication_information))
+
             payload = str.encode(
                 json.dumps({HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME: self._allowed_protocol_versions}),
                 "utf8")
@@ -265,7 +272,7 @@ class HandShake:
             # If authentication is required
             if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) != 0:
                 payload = str.encode(json.dumps(
-                    {HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME: HandShake.AUTHENTICATION_METHODS_AVAILABLE}),
+                    {HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME: self._allowed_authentication_methods}),
                     "utf8")
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC,
                                   payload=payload)
@@ -303,6 +310,8 @@ class HandShake:
             self._peer_public_key = serialization.load_pem_public_key(msg.payload, )
             self._symmetric_encryption_key = derive_key_hkdf(key=self.get_shared_key(), length=32)
         if msg_topic == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
+            payload = json.loads(bytes.decode(msg.payload, "utf8"))
+            self._server_authentication_method = payload[HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME]
             self._last_step = msg_topic
         if msg_topic == HandShake.AUTHENTICATION_TOPIC:
             self._last_step = msg_topic
