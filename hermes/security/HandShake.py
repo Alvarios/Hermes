@@ -170,6 +170,7 @@ class HandShake:
         in HandShake.PROTOCOL_VERSIONS_AVAILABLE.
         """
         # TODO : Remove derived_password and password_salt parameters and use generic parameter instead.
+        # TODO : Transform authentication_information into more generic parameter (dict).
         # TODO : manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
         self.role = role
@@ -222,67 +223,73 @@ class HandShake:
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
 
         if self.role == HandShake.CLIENT:
-            if self._last_step == HandShake.SERVER_KEY_SHARE_TOPIC:
-                # TODO : Change this message into json.
-                public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                           format=serialization.PublicFormat.
-                                                                           SubjectPublicKeyInfo)
-                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CLIENT_KEY_SHARE_TOPIC,
-                                  payload=public_bytes)
-            if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
-                # TODO : Add random bytes to add noise.
-                # TODO : Manage custom authentication method.
-                if len(self._allowed_authentication_methods) == 0 or self._allowed_authentication_methods[0] \
-                        not in self._server_authentication_method:
-                    return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
-                authentication_information = base64.b64encode(self._encrypt(self._authentication_information)).decode(
-                    "ascii")
-                payload = str.encode(json.dumps(
-                    {HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._allowed_authentication_methods[0],
-                     HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
-                         authentication_information}), "utf8")
-                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC, payload=payload)
-
-            payload = str.encode(
-                json.dumps({HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME: self._allowed_protocol_versions}),
-                "utf8")
-            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC, payload=payload)
+            return self._next_message_client()
 
         if self.role == HandShake.SERVER:
-            if self._last_step == HandShake.CONNECTION_REQUEST_TOPIC:
-                public_bytes = bytes.decode(
-                    self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                format=serialization.PublicFormat.
-                                                                SubjectPublicKeyInfo), "ascii")
-                protocol_version = ""
-                for version in self._client_protocol_versions:
-                    if version in self._allowed_protocol_versions:
-                        protocol_version = version
-                if protocol_version == "":
-                    self._connection_status = HandShake.CONNECTION_STATUS_FAILED
-                    return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
-                payload = str.encode(
-                    json.dumps({HandShake.SELECTED_PROTOCOL_VERSION_KEY_NAME: protocol_version,
-                                HandShake.SERVER_PUBLIC_KEY_KEY_NAME: public_bytes}),
-                    "utf8")
-                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC, payload=payload)
-            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) == 0:
-                self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
-                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
-            # If authentication is required
-            if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) != 0:
-                payload = str.encode(json.dumps(
-                    {HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME: self._allowed_authentication_methods}),
-                    "utf8")
-                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC,
-                                  payload=payload)
-            if self._last_step == HandShake.AUTHENTICATION_TOPIC and self._derived_password is not None:
-                if self._authentication_approved:
-                    self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
-                    return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
+            return self._next_message_server()
+
+    def _next_message_client(self) -> Union[None, UDPMessage]:
+        if self._last_step == HandShake.SERVER_KEY_SHARE_TOPIC:
+            # TODO : Change this message into json.
+            public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                       format=serialization.PublicFormat.
+                                                                       SubjectPublicKeyInfo)
+            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CLIENT_KEY_SHARE_TOPIC,
+                              payload=public_bytes)
+        if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
+            # TODO : Add random bytes to add noise.
+            # TODO : Manage custom authentication method.
+            if len(self._allowed_authentication_methods) == 0 or self._allowed_authentication_methods[0] \
+                    not in self._server_authentication_method:
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
+            authentication_information = base64.b64encode(self._encrypt(self._authentication_information)).decode(
+                "ascii")
+            payload = str.encode(json.dumps(
+                {HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._allowed_authentication_methods[0],
+                 HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
+                     authentication_information}), "utf8")
+            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC, payload=payload)
+
+        payload = str.encode(
+            json.dumps({HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME: self._allowed_protocol_versions}),
+            "utf8")
+        return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC, payload=payload)
+
+    def _next_message_server(self) -> Union[None, UDPMessage]:
+        if self._last_step == HandShake.CONNECTION_REQUEST_TOPIC:
+            public_bytes = bytes.decode(
+                self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                            format=serialization.PublicFormat.
+                                                            SubjectPublicKeyInfo), "ascii")
+            protocol_version = ""
+            for version in self._client_protocol_versions:
+                if version in self._allowed_protocol_versions:
+                    protocol_version = version
+            if protocol_version == "":
                 self._connection_status = HandShake.CONNECTION_STATUS_FAILED
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
-            return None
+            payload = str.encode(
+                json.dumps({HandShake.SELECTED_PROTOCOL_VERSION_KEY_NAME: protocol_version,
+                            HandShake.SERVER_PUBLIC_KEY_KEY_NAME: public_bytes}),
+                "utf8")
+            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC, payload=payload)
+        if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) == 0:
+            self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
+            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
+        # If authentication is required
+        if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) != 0:
+            payload = str.encode(json.dumps(
+                {HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME: self._allowed_authentication_methods}),
+                "utf8")
+            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC,
+                              payload=payload)
+        if self._last_step == HandShake.AUTHENTICATION_TOPIC and self._derived_password is not None:
+            if self._authentication_approved:
+                self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
+                return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
+            self._connection_status = HandShake.CONNECTION_STATUS_FAILED
+            return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
+        return None
 
     def add_message(self, msg: UDPMessage) -> NoReturn:
         """Handle given message and change HandShake state if needed.
