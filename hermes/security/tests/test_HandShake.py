@@ -140,18 +140,20 @@ def test_next_message_return_a_message_with_an_ec_public_key_when_connection_ste
     # Given
     server = HandShake(role=HandShake.SERVER)
     client = HandShake(role=HandShake.CLIENT)
-    expected_result_payload = client._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                            format=serialization.PublicFormat.
-                                                                            SubjectPublicKeyInfo)
+    expected_result_public_key = client._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                                               format=serialization.PublicFormat.
+                                                                               SubjectPublicKeyInfo)
     server.add_message(client.next_message())
     client.add_message(server.next_message())
     # When
     result = client.next_message()
+    payload = json.loads(bytes.decode(result.payload, "utf8"))
+    result_public_key = str.encode(payload[HandShake.CLIENT_PUBLIC_KEY_KEY_NAME], 'ascii')
 
     # Then
     assert int.from_bytes(result.msg_id, 'little') == codes.HANDSHAKE
     assert int.from_bytes(result.topic, 'little') == HandShake.CLIENT_KEY_SHARE_TOPIC
-    assert result.payload == expected_result_payload
+    assert result_public_key == expected_result_public_key
 
 
 def test_both_server_and_client_can_generate_shared_key_when_peer_public_key_has_been_received():

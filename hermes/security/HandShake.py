@@ -77,13 +77,14 @@ class HandShake:
             SELECTED_PROTOCOL_VERSION_KEY_NAME : The key name used to specify which protocol will be used for the
             handshake in the metadata.
             SERVER_PUBLIC_KEY_KEY_NAME : The key name used for server public key.
+            SERVER_PUBLIC_KEY_KEY_NAME : The key name used for client public key.
             AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME : The key name for authentication method available used
             for metadata.
             SELECTED_AUTHENTICATION_METHOD_KEY_NAME : The key name used to specify which authentication method will be
              used for the handshake in the metadata.
 
             PROTOCOL_VERSIONS_AVAILABLE : A list of protocol version available for the handshake. The newest version of
-            protocol available for both device will be used for the handshake.
+            the protocol will be used.
             AUTHENTICATION_METHODS_AVAILABLE : A list of authentication methods available for the handshake's
             authentication step. The client must use a method in this list to do authentication or send connection
             failed message.
@@ -92,8 +93,6 @@ class HandShake:
             PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY : The key name used in password authentication method to provide
              derived password.
             PASSWORD_AUTH_METHOD_SALT_KEY : The key name used in password authentication method to salt.
-
-
 
             CONNECTION_FAILED_TOPIC : UDPMessage topic used to inform connection failed.
             CONNECTION_REQUEST_TOPIC : UDPMessage topic used to inform a client want to create a connection.
@@ -134,6 +133,7 @@ class HandShake:
     PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME = "protocols_available"
     SELECTED_PROTOCOL_VERSION_KEY_NAME = "selected_protocol_version"
     SERVER_PUBLIC_KEY_KEY_NAME = "server_public_key"
+    CLIENT_PUBLIC_KEY_KEY_NAME = "client_public_key"
     AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME = "authentication_methods_available"
     SELECTED_AUTHENTICATION_METHOD_KEY_NAME = "selected_authentication_method"
 
@@ -240,12 +240,15 @@ class HandShake:
         :return next_message: A UDPMessage to send to remote host to continue handshake process.
         """
         if self._last_step == HandShake.SERVER_KEY_SHARE_TOPIC:
-            # TODO : Change this message into json.
-            public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                                       format=serialization.PublicFormat.
-                                                                       SubjectPublicKeyInfo)
+            public_bytes = bytes.decode(
+                self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                            format=serialization.PublicFormat.
+                                                            SubjectPublicKeyInfo), "ascii")
+            payload = str.encode(
+                json.dumps({HandShake.CLIENT_PUBLIC_KEY_KEY_NAME: public_bytes}), "utf8")
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CLIENT_KEY_SHARE_TOPIC,
-                              payload=public_bytes)
+                              payload=payload)
+
         if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
 
             if len(self._allowed_authentication_methods) == 0 or self._allowed_authentication_methods[0] \
@@ -330,7 +333,9 @@ class HandShake:
             self._symmetric_encryption_key = derive_key_hkdf(key=self.get_shared_key(), length=32)
         if msg_topic == HandShake.CLIENT_KEY_SHARE_TOPIC:
             self._last_step = msg_topic
-            self._peer_public_key = serialization.load_pem_public_key(msg.payload, )
+            payload = json.loads(bytes.decode(msg.payload, "utf8"))
+            self._peer_public_key = serialization.load_pem_public_key(
+                str.encode(payload[HandShake.CLIENT_PUBLIC_KEY_KEY_NAME], 'ascii'))
             self._symmetric_encryption_key = derive_key_hkdf(key=self.get_shared_key(), length=32)
         if msg_topic == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
             payload = json.loads(bytes.decode(msg.payload, "utf8"))
