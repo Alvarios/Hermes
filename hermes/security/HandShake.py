@@ -89,6 +89,11 @@ class HandShake:
             failed message.
 
             PASSWORD_AUTH_METHOD_PASSWORD_KEY : The key name used in password authentication method to provide password.
+            PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY : The key name used in password authentication method to provide
+             derived password.
+            PASSWORD_AUTH_METHOD_SALT_KEY : The key name used in password authentication method to salt.
+
+
 
             CONNECTION_FAILED_TOPIC : UDPMessage topic used to inform connection failed.
             CONNECTION_REQUEST_TOPIC : UDPMessage topic used to inform a client want to create a connection.
@@ -136,6 +141,8 @@ class HandShake:
     AUTHENTICATION_METHODS_AVAILABLE = ["password", "custom"]
 
     PASSWORD_AUTH_METHOD_PASSWORD_KEY = "password"
+    PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY = "derived_password"
+    PASSWORD_AUTH_METHOD_SALT_KEY = "salt"
 
     CONNECTION_FAILED_TOPIC = 0
     CONNECTION_REQUEST_TOPIC = 1
@@ -151,18 +158,12 @@ class HandShake:
     CONNECTION_STATUS_APPROVED = "approved"
     CONNECTION_STATUS_FAILED = "failed"
 
-    def __init__(self, role: Optional[str] = SERVER, derived_password: Optional[Union[None, bytes]] = None,
-                 password_salt: Optional[Union[None, bytes]] = None,
-                 authentication_information: Optional[Union[None, dict]] = None,
+    def __init__(self, role: Optional[str] = SERVER, authentication_information: Optional[Union[None, dict]] = None,
                  allowed_protocol_versions: Optional[Union[None, list]] = None,
                  allowed_authentication_methods: Optional[Union[None, list]] = None) -> None:
         """Create a new HandShake object with given parameter.
 
         :param role: The role of the current HandShake (client or server).
-        :param derived_password: Only required for role server. The derived password to use for password verification as
-         bytes. If None no authentication will be required during the handshake.
-        :param password_salt : Only required for role server. The salt used for key derivation corresponding to
-        derived_password as bytes.
         :param authentication_information :  Only required for role client. The information used by client
         for authentication.
         :param allowed_protocol_versions: A list of allowed protocol versions. All elements in the list must be
@@ -170,12 +171,17 @@ class HandShake:
         :param allowed_protocol_versions: A list of allowed authentication method. All elements in the list must be
         in HandShake.PROTOCOL_VERSIONS_AVAILABLE.
         """
-        # TODO : Remove derived_password and password_salt parameters and use generic parameter instead.
         # TODO : manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
         self.role = role
-        self._derived_password = derived_password
-        self._password_salt = password_salt
+        self._derived_password = None
+        self._password_salt = None
+        if authentication_information is not None and self.role == HandShake.SERVER:
+            if HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY in authentication_information["password"].keys():
+                self._derived_password = authentication_information["password"][
+                    HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY]
+            if HandShake.PASSWORD_AUTH_METHOD_SALT_KEY in authentication_information["password"].keys():
+                self._password_salt = authentication_information["password"][HandShake.PASSWORD_AUTH_METHOD_SALT_KEY]
         self._last_step = 0
         self._peer_public_key = None
         self._private_key = ec.generate_private_key(ec.SECP384R1())

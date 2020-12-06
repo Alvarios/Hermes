@@ -28,10 +28,11 @@ def test_hand_shake_verify_password_return_true_if_given_password_is_correct_and
         p=1,
     )
     derived_password = kdf.derive(password_to_derive)
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
 
-    role = HandShake.SERVER
-
-    server = HandShake(role=role, derived_password=derived_password, password_salt=password_salt)
+    server = HandShake(role=HandShake.SERVER, authentication_information=authentication_information_server)
     # When
     result = server._verify_password(password_to_verify=password_to_verify)
 
@@ -57,8 +58,10 @@ def test_hand_shake_verify_password_return_false_if_given_password_is_incorrect_
     derived_password = kdf.derive(password_to_derive)
 
     role = HandShake.SERVER
-
-    server = HandShake(role=role, derived_password=derived_password, password_salt=password_salt)
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = HandShake(role=role, authentication_information=authentication_information_server)
     # When
     result = server._verify_password(password_to_verify=password_to_verify)
 
@@ -73,8 +76,11 @@ def test_hand_shake_verify_password_return_true_in_any_cas_if_no_derived_passwor
     expected_result = True
 
     role = HandShake.SERVER
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: None}}
 
-    server = HandShake(role=role, derived_password=derived_password)
+    server = HandShake(role=role, authentication_information=authentication_information_server)
     # When
     results = [server._verify_password(password_to_verify=password) for password in passwords_to_verify]
 
@@ -190,8 +196,11 @@ def test_next_message_return_authentication_required_message_when_connection_ste
     password_salt = os.urandom(16)
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
     server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_method,
-                       password_salt=password_salt, derived_password=derived_password)
+                       authentication_information=authentication_information_server)
     client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=allowed_authentication_method)
 
     expected_message = UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC)
@@ -214,8 +223,11 @@ def test_decrypt_can_decrypt_messages_encrypted_with_encrypt_when_connection_ste
     password_salt = os.urandom(16)
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
     server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_method,
-                       password_salt=password_salt, derived_password=derived_password)
+                       authentication_information=authentication_information_server)
     client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=allowed_authentication_method)
 
     server.add_message(client.next_message())
@@ -239,8 +251,11 @@ def test_encrypt_return_different_bytes_than_input_when_connection_step_4_for_bo
     password_to_derive = b"test"
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
     server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_method,
-                       password_salt=password_salt, derived_password=derived_password)
+                       authentication_information=authentication_information_server)
     client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=allowed_authentication_method)
 
     server.add_message(client.next_message())
@@ -263,8 +278,11 @@ def test_next_message_return_authentication_message_when_connection_step_4_and_r
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
     authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
     server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_method,
-                       password_salt=password_salt, derived_password=derived_password)
+                       authentication_information=authentication_information_server)
     client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=allowed_authentication_method,
                        authentication_information=authentication_information_client)
 
@@ -295,8 +313,11 @@ def test_next_message_return_connection_approved_message_when_connection_step_6_
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
     authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
     server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_method,
-                       password_salt=password_salt, derived_password=derived_password)
+                       authentication_information=authentication_information_server)
     client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=allowed_authentication_method,
                        authentication_information=authentication_information_client)
 
@@ -325,8 +346,11 @@ def test_next_message_return_connection_failed_msg_when_connection_step_6_and_ro
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_client)
     allowed_authentication_method = ["password"]
     authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
     server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_method,
-                       password_salt=password_salt, derived_password=derived_password)
+                       authentication_information=authentication_information_server)
     client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=allowed_authentication_method,
                        authentication_information=authentication_information_client)
 
@@ -371,8 +395,11 @@ def test_authentication_required_message_contain_a_list_of_authentication_method
     password_salt = os.urandom(16)
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = HandShake.AUTHENTICATION_METHODS_AVAILABLE
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
     server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_method,
-                       password_salt=password_salt, derived_password=derived_password)
+                       authentication_information=authentication_information_server)
     authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
     client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=["password"],
                        authentication_information=authentication_information_client)
@@ -433,7 +460,10 @@ def test_get_status_return_failed_when_authentication_is_incorrect():
     authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_client}
     client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
                        allowed_authentication_methods=allowed_authentication_methods)
-    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = HandShake(role=HandShake.SERVER, authentication_information=authentication_information_server,
                        allowed_authentication_methods=allowed_authentication_methods)
 
     server.add_message(client.next_message())
@@ -458,7 +488,10 @@ def test_get_status_return_approved_when_authentication_is_correct():
     password_salt = os.urandom(16)
     password_client = b"test"
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
-    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password)
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = HandShake(role=HandShake.SERVER, authentication_information=authentication_information_server)
     authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_client}
     client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client)
 
@@ -730,7 +763,10 @@ def test_authentication_message_select_password_method_if_it_is_the_only_authent
     allowed_authentication_methods = ["password"]
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
-    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = HandShake(role=HandShake.SERVER, authentication_information=authentication_information_server,
                        allowed_authentication_methods=allowed_authentication_methods)
     client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
                        allowed_authentication_methods=allowed_authentication_methods)
@@ -755,7 +791,10 @@ def test_authentication_message_select_custom_method_if_it_is_the_only_authentic
     password_to_derive = b"test_password"
     allowed_authentication_methods = ["custom"]
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
-    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = HandShake(role=HandShake.SERVER, authentication_information=authentication_information_server,
                        allowed_authentication_methods=allowed_authentication_methods)
     authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
     client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
@@ -784,7 +823,10 @@ def test_client_next_message_is_connection_failed_if_no_authentication_method_av
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
                        allowed_authentication_methods=allowed_authentication_methods_client)
-    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = HandShake(role=HandShake.SERVER, authentication_information=authentication_information_server,
                        allowed_authentication_methods=allowed_authentication_methods_server)
 
     server.add_message(client.next_message())
@@ -805,11 +847,14 @@ def test_client_next_message_is_connection_failed_if_no_common_authentication_me
     allowed_authentication_methods_client = ["custom"]
     password_salt = os.urandom(16)
     password_to_derive = b"test_password"
-    authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
     client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
                        allowed_authentication_methods=allowed_authentication_methods_client)
-    server = HandShake(role=HandShake.SERVER, password_salt=password_salt, derived_password=derived_password,
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = HandShake(role=HandShake.SERVER, authentication_information=authentication_information_server,
                        allowed_authentication_methods=allowed_authentication_methods_server)
 
     server.add_message(client.next_message())
