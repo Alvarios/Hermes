@@ -152,7 +152,8 @@ class HandShake:
     CONNECTION_STATUS_FAILED = "failed"
 
     def __init__(self, role: Optional[str] = SERVER, derived_password: Optional[Union[None, bytes]] = None,
-                 password_salt: Optional[Union[None, bytes]] = None, authentication_information=None,
+                 password_salt: Optional[Union[None, bytes]] = None,
+                 authentication_information: Optional[Union[None, dict]] = None,
                  allowed_protocol_versions: Optional[Union[None, list]] = None,
                  allowed_authentication_methods: Optional[Union[None, list]] = None) -> None:
         """Create a new HandShake object with given parameter.
@@ -170,7 +171,6 @@ class HandShake:
         in HandShake.PROTOCOL_VERSIONS_AVAILABLE.
         """
         # TODO : Remove derived_password and password_salt parameters and use generic parameter instead.
-        # TODO : Transform authentication_information into more generic parameter (dict).
         # TODO : manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
         self.role = role
@@ -229,6 +229,10 @@ class HandShake:
             return self._next_message_server()
 
     def _next_message_client(self) -> Union[None, UDPMessage]:
+        """Return the next message if instance role is client.
+
+        :return next_message: A UDPMessage to send to remote host to continue handshake process.
+        """
         if self._last_step == HandShake.SERVER_KEY_SHARE_TOPIC:
             # TODO : Change this message into json.
             public_bytes = self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
@@ -237,13 +241,15 @@ class HandShake:
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CLIENT_KEY_SHARE_TOPIC,
                               payload=public_bytes)
         if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
-            # TODO : Add random bytes to add noise.
-            # TODO : Manage custom authentication method.
+
             if len(self._allowed_authentication_methods) == 0 or self._allowed_authentication_methods[0] \
                     not in self._server_authentication_method:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
-            authentication_information = base64.b64encode(self._encrypt(self._authentication_information)).decode(
-                "ascii")
+            # TODO : Add random bytes to add noise.
+            # TODO : Manage custom authentication method.
+            # TODO : Use base 64 instead of str encode.
+            authentication_information = base64.b64encode(self._encrypt(
+                self._authentication_information[HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY])).decode("ascii")
             payload = str.encode(json.dumps(
                 {HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._allowed_authentication_methods[0],
                  HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
@@ -256,6 +262,10 @@ class HandShake:
         return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_REQUEST_TOPIC, payload=payload)
 
     def _next_message_server(self) -> Union[None, UDPMessage]:
+        """Return the next message if instance role is server.
+
+        :return next_message: A UDPMessage to send to remote host to continue handshake process.
+        """
         if self._last_step == HandShake.CONNECTION_REQUEST_TOPIC:
             public_bytes = bytes.decode(
                 self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
