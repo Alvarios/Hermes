@@ -130,6 +130,8 @@ class HandShake:
             _allowed_authentication_method : Store a list of allowed authentication method.
             _server_authentication_method : A list of all servers's authentication methods available.
             _time_creation : The creation time of the instance.
+            _selected_authentication_method : Store the selected authentication method when role is client.
+            _custom_authentication_info : Store the custom authentication info sent by client.
     """
 
     SERVER = "server"
@@ -151,6 +153,8 @@ class HandShake:
     PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY = "derived_password"
     PASSWORD_AUTH_METHOD_SALT_KEY = "salt"
 
+    CUSTOM_AUTH_METHOD_INFO_KEY = "authentication_info"
+
     CONNECTION_FAILED_TOPIC = 0
     CONNECTION_REQUEST_TOPIC = 1
     SERVER_KEY_SHARE_TOPIC = 2
@@ -165,6 +169,7 @@ class HandShake:
     CONNECTION_STATUS_INCOMPLETE = "incomplete"
     CONNECTION_STATUS_APPROVED = "approved"
     CONNECTION_STATUS_FAILED = "failed"
+    CONNECTION_STATUS_WAIT_APPROVAL = "wait_approval"
 
     def __init__(self, role: Optional[str] = SERVER, authentication_information: Optional[Union[None, dict]] = None,
                  allowed_protocol_versions: Optional[Union[None, list]] = None,
@@ -215,6 +220,8 @@ class HandShake:
         self._time_creation = time.time()
         if role is HandShake.CLIENT and len(allowed_authentication_methods) >= 2:
             raise NotImplementedError("Multiple authentication method for client is not supported yet.")
+        self._selected_authentication_method: Union[None, str] = None
+        self._custom_authentication_info = {}
 
     def _verify_password(self, password_to_verify: bytes) -> bool:
         """Check if the input password correspond to the instance derived password and salt.
@@ -258,20 +265,23 @@ class HandShake:
                               payload=payload)
 
         if self._last_step == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
-
-            if len(self._allowed_authentication_methods) == 0 or self._allowed_authentication_methods[0] \
-                    not in self._server_authentication_method:
+            if self._selected_authentication_method is None:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
-            # TODO : Manage custom authentication method.
             # TODO : Use base 64 instead of str encode when possible.
-            authentication_information = base64.b64encode(self._encrypt(
-                self._authentication_information[HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY])).decode("ascii")
-            random_bits = base64.b64encode(os.urandom(HandShake.RANDOM_BITS_LENGTH)).decode("ascii")
-            payload = str.encode(json.dumps(
-                {HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._allowed_authentication_methods[0],
-                 HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
-                     authentication_information,
-                 HandShake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
+            payload = b""
+            if self._selected_authentication_method == "password":
+                authentication_information = base64.b64encode(self._encrypt(
+                    self._authentication_information[HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY])).decode("ascii")
+                random_bits = base64.b64encode(os.urandom(HandShake.RANDOM_BITS_LENGTH)).decode("ascii")
+                payload = str.encode(json.dumps(
+                    {HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
+                     HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
+                         authentication_information,
+                     HandShake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
+            if self._selected_authentication_method == "custom":
+                payload = str.encode(json.dumps(
+                    {HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
+                     HandShake.CUSTOM_AUTH_METHOD_INFO_KEY: self._authentication_information}), "utf8")
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC, payload=payload)
 
         payload = str.encode(
@@ -301,9 +311,11 @@ class HandShake:
                             HandShake.SERVER_PUBLIC_KEY_KEY_NAME: public_bytes}),
                 "utf8")
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.SERVER_KEY_SHARE_TOPIC, payload=payload)
+
         if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) == 0:
             self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
+
         # If authentication is required
         if self._last_step == HandShake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) != 0:
             payload = str.encode(json.dumps(
@@ -311,7 +323,9 @@ class HandShake:
                 "utf8")
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_REQUIRED_TOPIC,
                               payload=payload)
-        if self._last_step == HandShake.AUTHENTICATION_TOPIC and self._derived_password is not None:
+
+        if self._last_step == HandShake.AUTHENTICATION_TOPIC and (
+                self._derived_password is not None or self._selected_authentication_method != "password"):
             if self._authentication_approved:
                 self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_APPROVED_TOPIC)
@@ -328,33 +342,47 @@ class HandShake:
         msg_topic = int.from_bytes(msg.topic, 'little')
         if msg_id != codes.HANDSHAKE:
             return
+
         if msg_topic == HandShake.CONNECTION_FAILED_TOPIC:
             self._connection_status = HandShake.CONNECTION_STATUS_FAILED
+
         if msg_topic == HandShake.CONNECTION_REQUEST_TOPIC:
             payload = json.loads(bytes.decode(msg.payload, "utf8"))
             self._client_protocol_versions = payload[HandShake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME]
             self._last_step = msg_topic
+
         if msg_topic == HandShake.SERVER_KEY_SHARE_TOPIC:
             self._last_step = msg_topic
             payload = json.loads(bytes.decode(msg.payload, "utf8"))
             self._peer_public_key = serialization.load_pem_public_key(
                 str.encode(payload[HandShake.SERVER_PUBLIC_KEY_KEY_NAME], 'ascii'))
             self._symmetric_encryption_key = derive_key_hkdf(key=self.get_shared_key(), length=32)
+
         if msg_topic == HandShake.CLIENT_KEY_SHARE_TOPIC:
             self._last_step = msg_topic
             payload = json.loads(bytes.decode(msg.payload, "utf8"))
             self._peer_public_key = serialization.load_pem_public_key(
                 str.encode(payload[HandShake.CLIENT_PUBLIC_KEY_KEY_NAME], 'ascii'))
             self._symmetric_encryption_key = derive_key_hkdf(key=self.get_shared_key(), length=32)
+
         if msg_topic == HandShake.AUTHENTICATION_REQUIRED_TOPIC:
             payload = json.loads(bytes.decode(msg.payload, "utf8"))
             self._server_authentication_method = payload[HandShake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME]
+            if len(self._allowed_authentication_methods) > 0 and self._allowed_authentication_methods[0] \
+                    in self._server_authentication_method:
+                self._selected_authentication_method = self._allowed_authentication_methods[0]
             self._last_step = msg_topic
+
         if msg_topic == HandShake.AUTHENTICATION_TOPIC:
             self._last_step = msg_topic
             payload = json.loads(bytes.decode(msg.payload, "utf8"))
+            if payload[HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME] == "custom":
+                self._connection_status = HandShake.CONNECTION_STATUS_WAIT_APPROVAL
+                self._custom_authentication_info = payload[HandShake.CUSTOM_AUTH_METHOD_INFO_KEY]
+                return
             password = base64.b64decode(str.encode(payload[HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY], 'ascii'))
             self._authentication_approved = self._verify_password(self._decrypt(password))
+
         if msg_topic == HandShake.CONNECTION_APPROVED_TOPIC:
             self._connection_status = HandShake.CONNECTION_STATUS_APPROVED
 
@@ -411,3 +439,15 @@ class HandShake:
         :return: The time of creation of the instance.
         """
         return self._time_creation
+
+    def disapprove(self) -> NoReturn:
+        """Disapprove connection for custom authentication method."""
+        self._connection_status = HandShake.CONNECTION_STATUS_FAILED
+
+    def approve(self):
+        """"Approve connection for custom authentication method."""
+        self._connection_status = HandShake.CONNECTION_STATUS_INCOMPLETE
+        self._authentication_approved = True
+
+    def get_authentication_information(self):
+        return self._custom_authentication_info

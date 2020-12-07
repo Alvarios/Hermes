@@ -789,16 +789,9 @@ def test_authentication_message_select_password_method_if_it_is_the_only_authent
 
 def test_authentication_message_select_custom_method_if_it_is_the_only_authentication_method_for_both_instances():
     # Given
-    password_salt = os.urandom(16)
-    password_to_derive = b"test_password"
     allowed_authentication_methods = ["custom"]
-    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
-    authentication_information_server = {
-        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
-                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
-    server = HandShake(role=HandShake.SERVER, authentication_information=authentication_information_server,
-                       allowed_authentication_methods=allowed_authentication_methods)
-    authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_methods)
+    authentication_information_client = {}
     client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
                        allowed_authentication_methods=allowed_authentication_methods)
 
@@ -873,8 +866,8 @@ def test_client_next_message_is_connection_failed_if_no_common_authentication_me
 
 def test_authentication_message_contain_random_bits_of_correct_length():
     # Given
-    password_to_derive = b"test"
     password_salt = os.urandom(16)
+    password_to_derive = b"test"
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
     authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
@@ -903,5 +896,101 @@ def test_authentication_message_contain_random_bits_of_correct_length():
     assert int.from_bytes(result.topic, 'little') == expected_topic
     assert HandShake.AUTHENTICATION_RANDOM_BITS_KEY in payload.keys()
     assert len(base64.b64decode(payload[HandShake.AUTHENTICATION_RANDOM_BITS_KEY])) == HandShake.RANDOM_BITS_LENGTH
+
+
+def test_client_status_is_waiting_approval_when_authentication_method_is_custom():
+    # Given
+    expected_status = HandShake.CONNECTION_STATUS_WAIT_APPROVAL
+    allowed_authentication_methods_client = ["custom"]
+    allowed_authentication_methods_server = ["custom"]
+    authentication_information_client = {}
+    client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
+                       allowed_authentication_methods=allowed_authentication_methods_client)
+    server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_methods_server)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+
+    # When
+    status = server.get_status()
+
+    # Then
+    assert status == expected_status
+
+
+def test_client_status_is_failed_when_authentication_method_is_custom_and_disapprove_is_called():
+    # Given
+    expected_status = HandShake.CONNECTION_STATUS_FAILED
+    allowed_authentication_methods_client = ["custom"]
+    allowed_authentication_methods_server = ["custom"]
+    authentication_information_client = {}
+    client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
+                       allowed_authentication_methods=allowed_authentication_methods_client)
+    server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_methods_server)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+
+    # When
+    server.disapprove()
+    status = server.get_status()
+
+    # Then
+    assert status == expected_status
+
+
+def test_get_authentication_information_return_given_authentication_information_when_custom_method_is_used():
+    # Given
+    allowed_authentication_methods_client = ["custom"]
+    allowed_authentication_methods_server = ["custom"]
+    authentication_information_client = {"test": "test"}
+    client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
+                       allowed_authentication_methods=allowed_authentication_methods_client)
+    server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_methods_server)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+
+    # When
+    info = server.get_authentication_information()
+
+    # Then
+    assert info == authentication_information_client
+
+
+def test_client_status_is_approved_when_authentication_method_is_custom_and_approve_is_called():
+    # Given
+    expected_status = HandShake.CONNECTION_STATUS_APPROVED
+    allowed_authentication_methods_client = ["custom"]
+    allowed_authentication_methods_server = ["custom"]
+    authentication_information_client = {}
+    client = HandShake(role=HandShake.CLIENT, authentication_information=authentication_information_client,
+                       allowed_authentication_methods=allowed_authentication_methods_client)
+    server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_methods_server)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+
+    # When
+    server.approve()
+    client.add_message(server.next_message())
+    status_server = server.get_status()
+    status_client = client.get_status()
+
+    # Then
+    assert status_server == expected_status
+    assert status_client == expected_status
 
 # python -m pytest -s hermes/security/tests/test_HandShake.py -vv
