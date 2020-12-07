@@ -89,6 +89,9 @@ class HandShake:
             authentication step. The client must use a method in this list to do authentication or send connection
             failed message.
 
+            AUTHENTICATION_RANDOM_BITS_KEY : The key used to add random bits during authentication
+            (for security reasons).
+
             PASSWORD_AUTH_METHOD_PASSWORD_KEY : The key name used in password authentication method to provide password.
             PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY : The key name used in password authentication method to provide
              derived password.
@@ -102,7 +105,9 @@ class HandShake:
             AUTHENTICATION_REQUIRED_TOPIC : UDPMessage topic used to inform the authentication is required to approve
                                             the connection.
             AUTHENTICATION_TOPIC : UDPMessage topic used to inform the message contain the authentication information..
-            NONCE_LENGTH : The length of nonce used for encryption.
+
+            NONCE_LENGTH : The length of nonce used for encryption (in bits).
+            RANDOM_BYTES_LENGTH : The length of random bytes added to authentication messages (in bits).
 
             CONNECTION_STATUS_INCOMPLETE : The label used for incomplete handshake status.
             CONNECTION_STATUS_APPROVED : The label used for approved handshake status.
@@ -140,6 +145,8 @@ class HandShake:
     PROTOCOL_VERSIONS_AVAILABLE = ["alpha", "1.0"]
     AUTHENTICATION_METHODS_AVAILABLE = ["password", "custom"]
 
+    AUTHENTICATION_RANDOM_BITS_KEY = "random_bits"
+
     PASSWORD_AUTH_METHOD_PASSWORD_KEY = "password"
     PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY = "derived_password"
     PASSWORD_AUTH_METHOD_SALT_KEY = "salt"
@@ -153,6 +160,7 @@ class HandShake:
     AUTHENTICATION_TOPIC = 6
 
     NONCE_LENGTH = 12
+    RANDOM_BITS_LENGTH = 32
 
     CONNECTION_STATUS_INCOMPLETE = "incomplete"
     CONNECTION_STATUS_APPROVED = "approved"
@@ -254,15 +262,16 @@ class HandShake:
             if len(self._allowed_authentication_methods) == 0 or self._allowed_authentication_methods[0] \
                     not in self._server_authentication_method:
                 return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.CONNECTION_FAILED_TOPIC)
-            # TODO : Add random bytes to add noise.
             # TODO : Manage custom authentication method.
-            # TODO : Use base 64 instead of str encode.
+            # TODO : Use base 64 instead of str encode when possible.
             authentication_information = base64.b64encode(self._encrypt(
                 self._authentication_information[HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY])).decode("ascii")
+            random_bits = base64.b64encode(os.urandom(HandShake.RANDOM_BITS_LENGTH)).decode("ascii")
             payload = str.encode(json.dumps(
                 {HandShake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._allowed_authentication_methods[0],
                  HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
-                     authentication_information}), "utf8")
+                     authentication_information,
+                 HandShake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
             return UDPMessage(msg_id=codes.HANDSHAKE, topic=HandShake.AUTHENTICATION_TOPIC, payload=payload)
 
         payload = str.encode(

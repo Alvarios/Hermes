@@ -869,4 +869,39 @@ def test_client_next_message_is_connection_failed_if_no_common_authentication_me
 
     # Then
     assert int.from_bytes(connection_failed_message.topic, 'little') == HandShake.CONNECTION_FAILED_TOPIC
+
+
+def test_authentication_message_contain_random_bits_of_correct_length():
+    # Given
+    password_to_derive = b"test"
+    password_salt = os.urandom(16)
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    allowed_authentication_method = ["password"]
+    authentication_information_client = {HandShake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    authentication_information_server = {
+        "password": {HandShake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     HandShake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = HandShake(role=HandShake.SERVER, allowed_authentication_methods=allowed_authentication_method,
+                       authentication_information=authentication_information_server)
+    client = HandShake(role=HandShake.CLIENT, allowed_authentication_methods=allowed_authentication_method,
+                       authentication_information=authentication_information_client)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+
+    expected_id = codes.HANDSHAKE
+    expected_topic = HandShake.AUTHENTICATION_TOPIC
+
+    # When
+    result = client.next_message()
+    payload = json.loads(bytes.decode(result.payload, "utf8"))
+
+    # Then
+    assert int.from_bytes(result.msg_id, 'little') == expected_id
+    assert int.from_bytes(result.topic, 'little') == expected_topic
+    assert HandShake.AUTHENTICATION_RANDOM_BITS_KEY in payload.keys()
+    assert len(base64.b64decode(payload[HandShake.AUTHENTICATION_RANDOM_BITS_KEY])) == HandShake.RANDOM_BITS_LENGTH
+
 # python -m pytest -s hermes/security/tests/test_HandShake.py -vv
