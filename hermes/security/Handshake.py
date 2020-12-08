@@ -184,7 +184,6 @@ class Handshake:
         :param allowed_protocol_versions: A list of allowed authentication method. All elements in the list must be
         in Handshake.PROTOCOL_VERSIONS_AVAILABLE.
         """
-        # TODO : Clean the mess.
         # TODO : Check custom authentication info are encoded
         # TODO : Manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
@@ -246,7 +245,7 @@ class Handshake:
         :return next_message: A UDPMessage to send to remote host to continue handshake process.
         """
         if self._connection_status == Handshake.CONNECTION_STATUS_FAILED:
-            return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CONNECTION_FAILED_TOPIC)
+            return self._nxt_msg_connection_failed()
 
         if self.role == Handshake.CLIENT:
             return self._next_message_client()
@@ -254,40 +253,69 @@ class Handshake:
         if self.role == Handshake.SERVER:
             return self._next_message_server()
 
+    def _nxt_msg_connection_failed(self) -> UDPMessage:
+        """Return connection failed message .
+
+        :return next_message: A UDPMessage to send to remote host to continue handshake process.
+        """
+        self._connection_status = Handshake.CONNECTION_STATUS_FAILED
+        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CONNECTION_FAILED_TOPIC)
+
     def _next_message_client(self) -> Union[None, UDPMessage]:
         """Return the next message if instance role is client.
 
         :return next_message: A UDPMessage to send to remote host to continue handshake process.
         """
         if self._last_step == Handshake.SERVER_KEY_SHARE_TOPIC:
-            public_bytes = bytes.decode(
-                self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
-                                                            format=serialization.PublicFormat.
-                                                            SubjectPublicKeyInfo), "ascii")
-            payload = str.encode(
-                json.dumps({Handshake.CLIENT_PUBLIC_KEY_KEY_NAME: public_bytes}), "utf8")
-            return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CLIENT_KEY_SHARE_TOPIC,
-                              payload=payload)
+            return self._nxt_msg_clt_key_share()
 
         if self._last_step == Handshake.AUTHENTICATION_REQUIRED_TOPIC:
-            if self._selected_authentication_method is None:
-                return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CONNECTION_FAILED_TOPIC)
-            payload = b""
-            if self._selected_authentication_method == "password":
-                authentication_information = base64.b64encode(self._encrypt(
-                    self._authentication_information[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY])).decode("ascii")
-                random_bits = base64.b64encode(os.urandom(Handshake.RANDOM_BITS_LENGTH)).decode("ascii")
-                payload = str.encode(json.dumps(
-                    {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
-                     Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
-                         authentication_information,
-                     Handshake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
-            if self._selected_authentication_method == "custom":
-                payload = str.encode(json.dumps(
-                    {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
-                     Handshake.CUSTOM_AUTH_METHOD_INFO_KEY: self._authentication_information}), "utf8")
-            return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_TOPIC, payload=payload)
+            return self._nxt_msg_clt_authentication()
 
+        return self._nxt_msg_clt_connection_request()
+
+    def _nxt_msg_clt_key_share(self) -> UDPMessage:
+        """Return client key share message.
+
+        :return next_message: A UDPMessage to send to remote host to continue handshake process.
+        """
+        public_bytes = bytes.decode(
+            self._private_key.public_key().public_bytes(encoding=serialization.Encoding.PEM,
+                                                        format=serialization.PublicFormat.
+                                                        SubjectPublicKeyInfo), "ascii")
+        payload = str.encode(
+            json.dumps({Handshake.CLIENT_PUBLIC_KEY_KEY_NAME: public_bytes}), "utf8")
+        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CLIENT_KEY_SHARE_TOPIC,
+                          payload=payload)
+
+    def _nxt_msg_clt_authentication(self) -> UDPMessage:
+        """Return authentication message.
+
+        :return next_message: A UDPMessage to send to remote host to continue handshake process.
+        """
+        if self._selected_authentication_method is None:
+            return self._nxt_msg_connection_failed()
+        payload = b""
+        if self._selected_authentication_method == "password":
+            authentication_information = base64.b64encode(self._encrypt(
+                self._authentication_information[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY])).decode("ascii")
+            random_bits = base64.b64encode(os.urandom(Handshake.RANDOM_BITS_LENGTH)).decode("ascii")
+            payload = str.encode(json.dumps(
+                {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
+                 Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
+                     authentication_information,
+                 Handshake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
+        if self._selected_authentication_method == "custom":
+            payload = str.encode(json.dumps(
+                {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
+                 Handshake.CUSTOM_AUTH_METHOD_INFO_KEY: self._authentication_information}), "utf8")
+        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_TOPIC, payload=payload)
+
+    def _nxt_msg_clt_connection_request(self) -> UDPMessage:
+        """Return connection request message.
+
+        :return next_message: A UDPMessage to send to remote host to continue handshake process.
+        """
         payload = str.encode(
             json.dumps({Handshake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME: self._allowed_protocol_versions}),
             "utf8")
@@ -329,7 +357,7 @@ class Handshake:
             if version in self._allowed_protocol_versions:
                 protocol_version = version
         if protocol_version == "":
-            return self._nxt_msg_srv_connection_failed()
+            return self._nxt_msg_connection_failed()
         payload = str.encode(
             json.dumps({Handshake.SELECTED_PROTOCOL_VERSION_KEY_NAME: protocol_version,
                         Handshake.SERVER_PUBLIC_KEY_KEY_NAME: public_bytes}),
@@ -362,15 +390,7 @@ class Handshake:
         """
         if self._authentication_approved:
             return self._nxt_msg_srv_approve_connection()
-        return self._nxt_msg_srv_connection_failed()
-
-    def _nxt_msg_srv_connection_failed(self) -> UDPMessage:
-        """Return connection failed message .
-
-        :return next_message: A UDPMessage to send to remote host to continue handshake process.
-        """
-        self._connection_status = Handshake.CONNECTION_STATUS_FAILED
-        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CONNECTION_FAILED_TOPIC)
+        return self._nxt_msg_connection_failed()
 
     def add_message(self, msg: UDPMessage) -> NoReturn:
         """Handle given message and change Handshake state if needed.
