@@ -71,6 +71,7 @@ class UDPMessage:
             crc : The CRC32 of the message.
 
     """
+
     MSG_ID_LENGTH = 4
     TIME_CREATION_LENGTH = 8
     TOPIC_LENGTH = 4
