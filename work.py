@@ -22,7 +22,7 @@ from hermes.security.Handshake import Handshake
 from hermes.security.utils import derive_password_scrypt
 import os
 
-allowed_authentication_methods = ["custom"]
+allowed_authentication_methods = ["password"]
 password_to_derive = b"test"
 password_salt = os.urandom(16)
 password_client = b"test"
@@ -32,6 +32,7 @@ authentication_information_server = {
     "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                  Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
 authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_client}
+authentication_information_client = None
 if allowed_authentication_methods[0] == "custom":
     authentication_information_client = {"test": "retest", "foo": "bar"}
 

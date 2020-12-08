@@ -95,7 +95,9 @@ class Handshake:
             PASSWORD_AUTH_METHOD_PASSWORD_KEY : The key name used in password authentication method to provide password.
             PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY : The key name used in password authentication method to provide
              derived password.
-            PASSWORD_AUTH_METHOD_SALT_KEY : The key name used in password authentication method to salt.
+            PASSWORD_AUTH_METHOD_SALT_KEY : The key name used in password authentication method to provide salt.
+
+            AUTH_METHOD_INFO_KEY : Key used to send authentication information.
 
             CONNECTION_FAILED_TOPIC : UDPMessage topic used to inform connection failed.
             CONNECTION_REQUEST_TOPIC : UDPMessage topic used to inform a client want to create a connection.
@@ -149,7 +151,7 @@ class Handshake:
     PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY = "derived_password"
     PASSWORD_AUTH_METHOD_SALT_KEY = "salt"
 
-    CUSTOM_AUTH_METHOD_INFO_KEY = "authentication_info"
+    AUTH_METHOD_INFO_KEY = "authentication_info"
 
     CONNECTION_FAILED_TOPIC = 0
     CONNECTION_REQUEST_TOPIC = 1
@@ -184,11 +186,14 @@ class Handshake:
         # TODO : Manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
         # TODO : Check authentication behaviour when authentication info is None
+        # TODO : Release next version.
         self.role = role
         self._last_step = 0
         self._peer_public_key = None
         self._private_key = ec.generate_private_key(ec.SECP384R1())
         self._symmetric_encryption_key = None
+        if authentication_information is None:
+            authentication_information = {}
         self._authentication_information = authentication_information
 
         self._authentication_approved = False
@@ -286,19 +291,20 @@ class Handshake:
         if self._selected_authentication_method is None:
             return self._nxt_msg_connection_failed()
         payload = b""
+        random_bits = base64.b64encode(os.urandom(Handshake.RANDOM_BITS_LENGTH)).decode("ascii")
         if self._selected_authentication_method == "password":
-            authentication_information = self._authentication_information[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY]\
-                .decode("utf8")
-            random_bits = base64.b64encode(os.urandom(Handshake.RANDOM_BITS_LENGTH)).decode("ascii")
             payload = str.encode(json.dumps(
                 {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
-                 Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY:
-                     authentication_information,
+                 Handshake.AUTH_METHOD_INFO_KEY:
+                     self._authentication_information,
                  Handshake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
+
         if self._selected_authentication_method == "custom":
             payload = str.encode(json.dumps(
                 {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
-                 Handshake.CUSTOM_AUTH_METHOD_INFO_KEY: self._authentication_information}), "utf8")
+                 Handshake.AUTH_METHOD_INFO_KEY: self._authentication_information,
+                 Handshake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
+
         payload = self._encrypt(payload)
         return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_TOPIC, payload=payload)
 
@@ -466,9 +472,9 @@ class Handshake:
         payload = json.loads(bytes.decode(payload, "utf8"))
         if payload[Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME] == "custom":
             self._connection_status = Handshake.CONNECTION_STATUS_WAIT_APPROVAL
-            self._custom_authentication_info = payload[Handshake.CUSTOM_AUTH_METHOD_INFO_KEY]
+            self._custom_authentication_info = payload[Handshake.AUTH_METHOD_INFO_KEY]
             return
-        password = str.encode(payload[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY], 'utf8')
+        password = payload[Handshake.AUTH_METHOD_INFO_KEY]["password"].encode("utf8")
         self._authentication_approved = self._verify_password(password)
 
     def get_shared_key(self) -> bytes:

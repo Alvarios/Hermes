@@ -284,7 +284,7 @@ def test_next_message_return_authentication_message_when_connection_step_4_and_r
     password_salt = os.urandom(16)
     allowed_authentication_method = ["password"]
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
-    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive.decode("utf8")}
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
@@ -305,13 +305,13 @@ def test_next_message_return_authentication_message_when_connection_step_4_and_r
     result = client.next_message()
     payload = client._decrypt(result.payload)
     payload = json.loads(bytes.decode(payload, "utf8"))
-    password = payload["password"]
+    password = payload[Handshake.AUTH_METHOD_INFO_KEY]["password"]
 
     # Then
     assert int.from_bytes(result.msg_id, 'little') == expected_id
     assert int.from_bytes(result.topic, 'little') == expected_topic
 
-    assert password == password_to_derive.decode('ascii')
+    assert password == password_to_derive.decode('utf8')
 
 
 def test_next_message_return_connection_approved_message_when_connection_step_6_and_role_is_server_and_password_ok():
@@ -320,7 +320,7 @@ def test_next_message_return_connection_approved_message_when_connection_step_6_
     password_to_derive = b"test"
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
-    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive.decode("utf8")}
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
@@ -350,10 +350,10 @@ def test_next_message_return_connection_failed_msg_when_connection_step_6_and_ro
     # Given
     password_salt = os.urandom(16)
     password_to_derive = b"test"
-    password_client = b"incorrect"
-    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_client)
+    password_client = "incorrect"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
-    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_client}
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
@@ -462,7 +462,7 @@ def test_get_status_return_failed_when_authentication_is_incorrect():
     # Given
     password_to_derive = b"test"
     password_salt = os.urandom(16)
-    password_client = b"incorrect"
+    password_client = "incorrect"
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_methods = ["password"]
     authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_client}
@@ -495,7 +495,7 @@ def test_get_status_return_approved_when_authentication_is_correct():
     allowed_authentication_methods = ["password"]
     password_to_derive = b"test"
     password_salt = os.urandom(16)
-    password_client = b"test"
+    password_client = "test"
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
@@ -773,7 +773,7 @@ def test_authentication_message_select_password_method_if_it_is_the_only_authent
     password_to_derive = b"test_password"
     allowed_authentication_methods = ["password"]
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
-    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive.decode("utf8")}
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
@@ -881,7 +881,7 @@ def test_authentication_message_contain_random_bits_of_correct_length():
     password_to_derive = b"test"
     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
-    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
+    authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive.decode("utf8")}
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
@@ -1004,5 +1004,36 @@ def test_client_status_is_approved_when_authentication_method_is_custom_and_appr
     # Then
     assert status_server == expected_status
     assert status_client == expected_status
+
+
+# def test_next_message_return_connection_failed_msg_when_connection_step_6_and_role_is_client_and_auth_info_is_none():
+#     # Given
+#     password_salt = os.urandom(16)
+#     password = b"incorrect"
+#     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password)
+#     allowed_authentication_method = ["password"]
+#     expected_topic = Handshake.CONNECTION_FAILED_TOPIC
+#     expected_id = codes.HANDSHAKE
+#     authentication_information_server = {
+#         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+#                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+#     server = Handshake(role=Handshake.SERVER, allowed_authentication_methods=allowed_authentication_method,
+#                        authentication_information=authentication_information_server)
+#     authentication_information_client = None
+#     client = Handshake(role=Handshake.CLIENT, allowed_authentication_methods=allowed_authentication_method,
+#                        authentication_information=authentication_information_client)
+#
+#     server.add_message(client.next_message())
+#     client.add_message(server.next_message())
+#     server.add_message(client.next_message())
+#     client.add_message(server.next_message())
+#     server.add_message(client.next_message())
+#
+#     # When
+#     result = server.next_message()
+#
+#     # Then
+#     assert int.from_bytes(result.msg_id, 'little') == expected_id
+#     assert int.from_bytes(result.topic, 'little') == expected_topic
 
 # python -m pytest -s hermes/security/tests/test_Handshake.py -vv
