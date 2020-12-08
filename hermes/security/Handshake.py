@@ -257,7 +257,7 @@ class Handshake:
         :return next_message: A UDPMessage to send to remote host to continue handshake process.
         """
         self._connection_status = Handshake.CONNECTION_STATUS_FAILED
-        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CONNECTION_FAILED_TOPIC)
+        return UDPMessage(code=codes.HANDSHAKE, topic=Handshake.CONNECTION_FAILED_TOPIC)
 
     def _next_message_client(self) -> Union[None, UDPMessage]:
         """Return the next message if instance role is client.
@@ -283,7 +283,7 @@ class Handshake:
                                                         SubjectPublicKeyInfo), "ascii")
         payload = str.encode(
             json.dumps({Handshake.CLIENT_PUBLIC_KEY_KEY_NAME: public_bytes}), "utf8")
-        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CLIENT_KEY_SHARE_TOPIC,
+        return UDPMessage(code=codes.HANDSHAKE, topic=Handshake.CLIENT_KEY_SHARE_TOPIC,
                           payload=payload)
 
     def _nxt_msg_clt_authentication(self) -> UDPMessage:
@@ -299,7 +299,7 @@ class Handshake:
              Handshake.AUTH_METHOD_INFO_KEY: self._authentication_information,
              Handshake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
         payload = self._encrypt(payload)
-        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_TOPIC, payload=payload)
+        return UDPMessage(code=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_TOPIC, payload=payload)
 
     def _nxt_msg_clt_connection_request(self) -> UDPMessage:
         """Return connection request message.
@@ -309,7 +309,7 @@ class Handshake:
         payload = str.encode(
             json.dumps({Handshake.PROTOCOL_VERSIONS_AVAILABLE_KEY_NAME: self._allowed_protocol_versions}),
             "utf8")
-        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CONNECTION_REQUEST_TOPIC, payload=payload)
+        return UDPMessage(code=codes.HANDSHAKE, topic=Handshake.CONNECTION_REQUEST_TOPIC, payload=payload)
 
     def _next_message_server(self) -> Union[None, UDPMessage]:
         """Return the next message if instance role is server.
@@ -351,7 +351,7 @@ class Handshake:
             json.dumps({Handshake.SELECTED_PROTOCOL_VERSION_KEY_NAME: protocol_version,
                         Handshake.SERVER_PUBLIC_KEY_KEY_NAME: public_bytes}),
             "utf8")
-        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.SERVER_KEY_SHARE_TOPIC, payload=payload)
+        return UDPMessage(code=codes.HANDSHAKE, topic=Handshake.SERVER_KEY_SHARE_TOPIC, payload=payload)
 
     def _nxt_msg_srv_approve_connection(self) -> UDPMessage:
         """Return connection approve message .
@@ -359,7 +359,7 @@ class Handshake:
         :return next_message: A UDPMessage to send to remote host to continue handshake process.
         """
         self._connection_status = Handshake.CONNECTION_STATUS_APPROVED
-        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CONNECTION_APPROVED_TOPIC)
+        return UDPMessage(code=codes.HANDSHAKE, topic=Handshake.CONNECTION_APPROVED_TOPIC)
 
     def _nxt_msg_srv_authentication_required(self) -> UDPMessage:
         """Return authentication approved message .
@@ -369,7 +369,7 @@ class Handshake:
         payload = str.encode(json.dumps(
             {Handshake.AUTHENTICATION_METHODS_AVAILABLE_KEY_NAME: self._allowed_authentication_methods}),
             "utf8")
-        return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_REQUIRED_TOPIC,
+        return UDPMessage(code=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_REQUIRED_TOPIC,
                           payload=payload)
 
     def _nxt_msg_srv_authentication_check(self) -> UDPMessage:

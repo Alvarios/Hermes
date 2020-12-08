@@ -519,7 +519,7 @@ class ImageManager:
         :param encoding: The encoding of the pixel (default 0 = None).
         :return header_msg: The UDPMessage containing image metadata.
         """
-        return UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, topic=topic, message_nb=ImageManager.NB_MSG_HEADER,
+        return UDPMessage(code=ImageManager.VIDEO_PACKET_ID, topic=topic, subtopic=ImageManager.NB_MSG_HEADER,
                           payload=nb_packet.to_bytes(ImageManager.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
                               ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE,
                                                                                          'little') + length.to_bytes(
@@ -544,8 +544,8 @@ class ImageManager:
         if self.async_msg_generation and (force is False):
             return self.messages
         img_split = self.split_image()
-        to_msg = lambda enum: UDPMessage(msg_id=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
-                                         message_nb=enum[0] + 1).to_bytes()
+        to_msg = lambda enum: UDPMessage(code=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
+                                         subtopic=enum[0] + 1).to_bytes()
         img_messages = map(to_msg, enumerate(img_split))
         header = ImageManager.get_header_msg(topic, math.ceil(np.array(
             self.current_image.shape).prod() / self.max_packet_size), int(np.array(self.current_image.shape).prod()),
@@ -636,7 +636,7 @@ class VideoTopic:
     def add_message(self, new_message: UDPMessage) -> NoReturn:
         """Add a message to the topic.
 
-        The position of the message in rcv_message list will depend on message_nb (start at 1).
+        The position of the message in rcv_message list will depend on subtopic (start at 1).
 
         :param new_message: The message to add to the topic.
         """
