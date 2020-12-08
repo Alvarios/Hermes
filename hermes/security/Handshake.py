@@ -185,7 +185,6 @@ class Handshake:
         # TODO : authentication_information vs allowed_authentication_methods for server ??
         # TODO : Manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
-        # TODO : Check authentication behaviour when authentication info is None
         # TODO : Release next version.
         self.role = role
         self._last_step = 0
@@ -463,6 +462,12 @@ class Handshake:
         if payload[Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME] == "custom":
             self._connection_status = Handshake.CONNECTION_STATUS_WAIT_APPROVAL
             self._custom_authentication_info = payload[Handshake.AUTH_METHOD_INFO_KEY]
+            return
+        if Handshake.AUTH_METHOD_INFO_KEY not in payload.keys():
+            self._authentication_approved = False
+            return
+        if "password" not in payload[Handshake.AUTH_METHOD_INFO_KEY].keys():
+            self._authentication_approved = False
             return
         password = payload[Handshake.AUTH_METHOD_INFO_KEY]["password"].encode("utf8")
         self._authentication_approved = self._verify_password(password)

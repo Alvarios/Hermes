@@ -1006,34 +1006,34 @@ def test_client_status_is_approved_when_authentication_method_is_custom_and_appr
     assert status_client == expected_status
 
 
-# def test_next_message_return_connection_failed_msg_when_connection_step_6_and_role_is_client_and_auth_info_is_none():
-#     # Given
-#     password_salt = os.urandom(16)
-#     password = b"incorrect"
-#     derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password)
-#     allowed_authentication_method = ["password"]
-#     expected_topic = Handshake.CONNECTION_FAILED_TOPIC
-#     expected_id = codes.HANDSHAKE
-#     authentication_information_server = {
-#         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
-#                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
-#     server = Handshake(role=Handshake.SERVER, allowed_authentication_methods=allowed_authentication_method,
-#                        authentication_information=authentication_information_server)
-#     authentication_information_client = None
-#     client = Handshake(role=Handshake.CLIENT, allowed_authentication_methods=allowed_authentication_method,
-#                        authentication_information=authentication_information_client)
-#
-#     server.add_message(client.next_message())
-#     client.add_message(server.next_message())
-#     server.add_message(client.next_message())
-#     client.add_message(server.next_message())
-#     server.add_message(client.next_message())
-#
-#     # When
-#     result = server.next_message()
-#
-#     # Then
-#     assert int.from_bytes(result.msg_id, 'little') == expected_id
-#     assert int.from_bytes(result.topic, 'little') == expected_topic
+def test_next_message_return_connection_failed_msg_when_connection_step_6_and_role_is_client_and_auth_info_is_none():
+    # Given
+    password_salt = os.urandom(16)
+    password = b"incorrect"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password)
+    allowed_authentication_method = ["password"]
+    expected_topic = Handshake.CONNECTION_FAILED_TOPIC
+    expected_id = codes.HANDSHAKE
+    authentication_information_server = {
+        "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = Handshake(role=Handshake.SERVER, allowed_authentication_methods=allowed_authentication_method,
+                       authentication_information=authentication_information_server)
+    authentication_information_client = None
+    client = Handshake(role=Handshake.CLIENT, allowed_authentication_methods=allowed_authentication_method,
+                       authentication_information=authentication_information_client)
+
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+    client.add_message(server.next_message())
+    server.add_message(client.next_message())
+
+    # When
+    result = server.next_message()
+
+    # Then
+    assert int.from_bytes(result.msg_id, 'little') == expected_id
+    assert int.from_bytes(result.topic, 'little') == expected_topic
 
 # python -m pytest -s hermes/security/tests/test_Handshake.py -vv
