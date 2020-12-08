@@ -55,7 +55,7 @@ class UDPSocket:
             socket : The socket object used for udp communication.
             is_running : A flag that specify if the socket is currently running.
             key : The encryption key used to encrypt message. If no value is provided it will generate a new one.
-            fernet_encoder : The encoder used to encrypt and decrypt messages.
+            encoder : The encoder used to encrypt and decrypt messages.
             enable_multicast : Specify if the socket can use multicast.
             multicast_ttl : The TTL used for multicast.
             must_listen : Define if the socket must listen for messages.
@@ -95,7 +95,7 @@ class UDPSocket:
         self.socket: Union[socket.socket, None] = None
         self.is_running: bool = False
         self.key: bytes = key if key is not None else Fernet.generate_key()
-        self.fernet_encoder: Union[Fernet, None] = None
+        self.encoder: Union[Fernet, None] = None
         self.enable_multicast: bool = enable_multicast
         self.multicast_ttl: int = multicast_ttl
         self.must_listen = must_listen
@@ -143,7 +143,7 @@ class UDPSocket:
     def _setup(self):
         """Setup function of the class."""
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        self.fernet_encoder = Fernet(self.key)
+        self.encoder = Fernet(self.key)
         self.socket.setblocking(self.setblocking)
         self.socket.bind((self.socket_ip, self.socket_port))
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -252,12 +252,12 @@ class UDPSocket:
         return self.external_pipe.recv()
 
     def _change_key(self, new_key: bytes) -> NoReturn:
-        """Change the encryption key of the socket and create a new fernet_encoder.
+        """Change the encryption key of the socket and create a new encoder.
 
         :param new_key: The new key to use for encryption.
         """
         self.key = new_key
-        self.fernet_encoder = Fernet(self.key)
+        self.encoder = Fernet(self.key)
 
     def _encrypt(self, msg: bytes) -> bytes:
         """Internal function used to encrypt data when encryption in transit is enabled.
@@ -266,7 +266,7 @@ class UDPSocket:
 
         :return: The message encrypted.
         """
-        return self.fernet_encoder.encrypt(msg)
+        return self.encoder.encrypt(msg)
 
     def _decrypt(self, msg: bytes) -> bytes:
         """Internal function used to decrypt data when encryption in transit is enabled.
@@ -276,6 +276,6 @@ class UDPSocket:
         :return: The message decrypted if it is possible else the input message.
         """
         try:
-            return self.fernet_encoder.decrypt(msg)
+            return self.encoder.decrypt(msg)
         except InvalidToken:
             return msg

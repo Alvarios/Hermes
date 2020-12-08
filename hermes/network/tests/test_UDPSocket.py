@@ -222,8 +222,8 @@ def test_new_socket_creates_a_fernet_encoder():
     udp_socket = UDPSocket(key=key, socket_port=50014).start()
 
     # Then
-    assert udp_socket.fernet_encoder is not None
-    assert type(udp_socket.fernet_encoder) is Fernet
+    assert udp_socket.encoder is not None
+    assert type(udp_socket.encoder) is Fernet
     udp_socket.stop()
     time.sleep(.5)
 
@@ -251,14 +251,14 @@ def test_change_key_correctly_change_the_fernet_encoder():
 
     # When
     udp_socket = UDPSocket(key=key_old, socket_port=50016).start()
-    msg_crypt = udp_socket.fernet_encoder.encrypt(msg)
-    msg_decrypt_old = udp_socket.fernet_encoder.decrypt(msg_crypt)
+    msg_crypt = udp_socket.encoder.encrypt(msg)
+    msg_decrypt_old = udp_socket.encoder.decrypt(msg_crypt)
     udp_socket.change_key(key_new)
 
     # Then
     assert msg_decrypt_old == msg
     with pytest.raises(InvalidToken):
-        udp_socket.fernet_encoder.decrypt(msg_crypt)
+        udp_socket.encoder.decrypt(msg_crypt)
     udp_socket.stop()
     time.sleep(.5)
 
@@ -356,4 +356,4 @@ def test_udp_socket_can_read_unencrypted_messages_when_encryption_in_transit_set
     # Then
     assert udp_socket.pull()[0] == msg
 
-# # python -m pytest -s -vv hermes/network
+# python -m pytest -s -vv hermes/network
