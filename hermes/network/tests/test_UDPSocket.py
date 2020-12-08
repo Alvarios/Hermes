@@ -2,8 +2,8 @@ from hermes.network.UDPSocket import UDPSocket
 import collections
 import socket
 import time
-import pytest
-from cryptography.fernet import Fernet, InvalidToken
+from hermes.security.utils import generate_key_32
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
 
 def test_new_udp_socket_correctly_set_encryption_in_transit():
@@ -191,7 +191,7 @@ def test_pull_allow_to_get_first_message_in_the_queue():
 
 def test_new_udp_socket_correctly_set_encryption_key():
     # Given
-    key = Fernet.generate_key()
+    key = generate_key_32()
 
     # When
     udp_socket = UDPSocket(key=key, socket_port=50012).start()
@@ -216,22 +216,22 @@ def test_key_is_not_none_when_no_value_is_given():
 
 def test_new_socket_creates_a_fernet_encoder():
     # Given
-    key = Fernet.generate_key()
+    key = generate_key_32()
 
     # When
     udp_socket = UDPSocket(key=key, socket_port=50014).start()
 
     # Then
     assert udp_socket.encoder is not None
-    assert type(udp_socket.encoder) is Fernet
+    assert type(udp_socket.encoder) is ChaCha20Poly1305
     udp_socket.stop()
     time.sleep(.5)
 
 
 def test_change_key_correctly_change_the_key():
     # Given
-    key_old = Fernet.generate_key()
-    key_new = Fernet.generate_key()
+    key_old = generate_key_32()
+    key_new = generate_key_32()
 
     # When
     udp_socket = UDPSocket(key=key_old, socket_port=50015).start()
@@ -245,28 +245,26 @@ def test_change_key_correctly_change_the_key():
 
 def test_change_key_correctly_change_the_fernet_encoder():
     # Given
-    key_old = Fernet.generate_key()
-    key_new = Fernet.generate_key()
+    key_old = generate_key_32()
+    key_new = generate_key_32()
     msg = b"tests"
 
     # When
     udp_socket = UDPSocket(key=key_old, socket_port=50016).start()
-    msg_crypt = udp_socket.encoder.encrypt(msg)
-    msg_decrypt_old = udp_socket.encoder.decrypt(msg_crypt)
+    msg_crypt = udp_socket._encrypt(msg)
+    msg_decrypt_old = udp_socket._decrypt(msg_crypt)
     udp_socket.change_key(key_new)
 
     # Then
     assert msg_decrypt_old == msg
-    with pytest.raises(InvalidToken):
-        udp_socket.encoder.decrypt(msg_crypt)
+
     udp_socket.stop()
     time.sleep(.5)
 
 
 def test_udp_socket_send_encrypted_messages_when_encryption_in_transit_set_to_true():
     # Given
-    key = Fernet.generate_key()
-    test_fernet = Fernet(key=key)
+    key = generate_key_32()
     msg = b"tests"
     socket_ip = "127.0.0.1"
     socket_port = 50017
@@ -288,7 +286,8 @@ def test_udp_socket_send_encrypted_messages_when_encryption_in_transit_set_to_tr
     time.sleep(.5)
 
     # Then
-    assert test_fernet.decrypt(rcv_msg) == msg
+    assert rcv_msg != msg
+    assert msg == udp_socket._decrypt(rcv_msg)
 
 
 def test_udp_socket_can_read_encrypted_messages_when_encryption_in_transit_set_to_true():

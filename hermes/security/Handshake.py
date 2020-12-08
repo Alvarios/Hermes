@@ -108,7 +108,7 @@ class Handshake:
                                             the connection.
             AUTHENTICATION_TOPIC : UDPMessage topic used to inform the message contain the authentication information..
 
-            NONCE_LENGTH : The length of nonce used for encryption (in bits).
+            NONCE_LENGTH : The length of nonce used for encryption (in bytes).
             RANDOM_BYTES_LENGTH : The length of random bytes added to authentication messages (in bits).
 
             CONNECTION_STATUS_INCOMPLETE : The label used for incomplete handshake status.
