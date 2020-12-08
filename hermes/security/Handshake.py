@@ -115,10 +115,6 @@ class Handshake:
 
         Attributes :
             role : The role of the current Handshake (client or server).
-            _derived_password : Only required for role server. The derived password used for authentication (if set
-                                to None no authentication is required)
-            _password_salt : Only required for role server. The salt used for key derivation corresponding to
-                            _derived_password as bytes.
             _last_step : Stores the last validated step of the handshake.
             _peer_public_key : Stores the peer public key when it has been received.
             _private_key : Stores the ephemeral private key used for handshake.
@@ -184,21 +180,13 @@ class Handshake:
         :param allowed_protocol_versions: A list of allowed authentication method. All elements in the list must be
         in Handshake.PROTOCOL_VERSIONS_AVAILABLE.
         """
+        # TODO : authentication_information vs allowed_authentication_methods for server ??
         # TODO : Check custom authentication info are encoded
         # TODO : Manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
         # TODO : Take a look to string and bytes encoding (use base64 everywhere?)
         # TODO : Check authentication behaviour when authentication info is None
         self.role = role
-        self._derived_password = None
-        self._password_salt = None
-        # TODO : Remove _derived_password and _password_salt
-        if authentication_information is not None and self.role == Handshake.SERVER:
-            if Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY in authentication_information["password"].keys():
-                self._derived_password = authentication_information["password"][
-                    Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY]
-            if Handshake.PASSWORD_AUTH_METHOD_SALT_KEY in authentication_information["password"].keys():
-                self._password_salt = authentication_information["password"][Handshake.PASSWORD_AUTH_METHOD_SALT_KEY]
         self._last_step = 0
         self._peer_public_key = None
         self._private_key = ec.generate_private_key(ec.SECP384R1())
@@ -234,10 +222,14 @@ class Handshake:
 
         :return: True if no derived password has been set or if the input is verified, else False.
         """
-        if self._derived_password is None:
+        derived_password = self._authentication_information["password"][
+            Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY]
+        if Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY not in self._authentication_information[
+            "password"].keys() or derived_password is None:
             return True
-        return verify_password_scrypt(password_to_verify=password_to_verify, derived_password=self._derived_password,
-                                      password_salt=self._password_salt)
+        return verify_password_scrypt(password_to_verify=password_to_verify, derived_password=derived_password,
+                                      password_salt=self._authentication_information["password"][
+                                          Handshake.PASSWORD_AUTH_METHOD_SALT_KEY])
 
     def next_message(self) -> Union[None, UDPMessage]:
         """Return the next message to send to remote host based on current instance state.
@@ -336,8 +328,7 @@ class Handshake:
         if self._last_step == Handshake.CLIENT_KEY_SHARE_TOPIC and len(self._allowed_authentication_methods) != 0:
             return self._nxt_msg_srv_authentication_required()
 
-        if self._last_step == Handshake.AUTHENTICATION_TOPIC and (
-                self._derived_password is not None or self._selected_authentication_method != "password"):
+        if self._last_step == Handshake.AUTHENTICATION_TOPIC:
             return self._nxt_msg_srv_authentication_check()
 
         # Default behaviour
@@ -543,5 +534,9 @@ class Handshake:
         self._connection_status = Handshake.CONNECTION_STATUS_INCOMPLETE
         self._authentication_approved = True
 
-    def get_authentication_information(self):
+    def get_authentication_information(self) -> dict:
+        """Return received authentication information (designed for custom authentication method).
+
+        :return: A dict containing custom authentication information.
+        """
         return self._custom_authentication_info
