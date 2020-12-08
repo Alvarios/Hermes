@@ -173,15 +173,12 @@ class UDPSocket:
                 if len(self.queue) >= self.max_queue_size:
                     raise BufferError
                 if self.encryption_in_transit:
-                    try:
-                        rcv_msg = (self.fernet_encoder.decrypt(rcv_msg[0]), rcv_msg[1])
-                    except InvalidToken:
-                        pass
+                    rcv_msg = (self._decrypt(rcv_msg[0]), rcv_msg[1])
                 self.queue.append(rcv_msg)
             except OSError:
                 pass
 
-    def sendto(self, msg: Optional[bytes] = bytes,
+    def sendto(self, msg: Optional[bytes] = bytes(),
                address_port: Optional[Union[Tuple[str, int], None]] = None,
                skip_encryption: Optional[bool] = False) -> NoReturn:
         """Call to _sendto.
@@ -189,7 +186,7 @@ class UDPSocket:
         :param msg: The data to send.
         :param address_port: A tuple of ip address and port of the target network endpoint.
         :param skip_encryption: If encryption_in_transit is set, skip_encryption will disable the encryption for
-                                this message.
+        this message.
         """
         if self.run_new_process is False:
             return self._sendto(msg=msg, address_port=address_port, skip_encryption=skip_encryption)
@@ -199,7 +196,7 @@ class UDPSocket:
             pass
         return self.external_pipe.recv()
 
-    def _sendto(self, msg: Optional[bytes] = bytes,
+    def _sendto(self, msg: Optional[bytes] = bytes(),
                 address_port: Optional[Union[Tuple[str, int], None]] = None,
                 skip_encryption: Optional[bool] = False) -> NoReturn:
         """Send a message to given network endpoint.
@@ -209,8 +206,8 @@ class UDPSocket:
         :param skip_encryption: If encryption_in_transit is set, skip_encryption will disable the encryption for
                                 this message.
         """
-        if self.encryption_in_transit and (not skip_encryption):
-            msg = self.fernet_encoder.encrypt(msg)
+        if self.encryption_in_transit and not skip_encryption:
+            msg = self._encrypt(msg)
         try:
             self.socket.sendto(msg, address_port)
         except OSError:
@@ -261,3 +258,24 @@ class UDPSocket:
         """
         self.key = new_key
         self.fernet_encoder = Fernet(self.key)
+
+    def _encrypt(self, msg: bytes) -> bytes:
+        """Internal function used to encrypt data when encryption in transit is enabled.
+
+        :param msg: The message to encrypt.
+
+        :return: The message encrypted.
+        """
+        return self.fernet_encoder.encrypt(msg)
+
+    def _decrypt(self, msg: bytes) -> bytes:
+        """Internal function used to decrypt data when encryption in transit is enabled.
+
+        :param msg: The message to decrypt.
+
+        :return: The message decrypted if it is possible else the input message.
+        """
+        try:
+            return self.fernet_encoder.decrypt(msg)
+        except InvalidToken:
+            return msg
