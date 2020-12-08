@@ -290,21 +290,11 @@ class Handshake:
         """
         if self._selected_authentication_method is None:
             return self._nxt_msg_connection_failed()
-        payload = b""
         random_bits = base64.b64encode(os.urandom(Handshake.RANDOM_BITS_LENGTH)).decode("ascii")
-        if self._selected_authentication_method == "password":
-            payload = str.encode(json.dumps(
-                {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
-                 Handshake.AUTH_METHOD_INFO_KEY:
-                     self._authentication_information,
-                 Handshake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
-
-        if self._selected_authentication_method == "custom":
-            payload = str.encode(json.dumps(
-                {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
-                 Handshake.AUTH_METHOD_INFO_KEY: self._authentication_information,
-                 Handshake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
-
+        payload = str.encode(json.dumps(
+            {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
+             Handshake.AUTH_METHOD_INFO_KEY: self._authentication_information,
+             Handshake.AUTHENTICATION_RANDOM_BITS_KEY: random_bits}), "utf8")
         payload = self._encrypt(payload)
         return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_TOPIC, payload=payload)
 

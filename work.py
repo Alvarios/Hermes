@@ -25,14 +25,14 @@ import os
 allowed_authentication_methods = ["password"]
 password_to_derive = b"test"
 password_salt = os.urandom(16)
-password_client = b"test"
+password_client = "test"
 derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
 
 authentication_information_server = {
     "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                  Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
 authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_client}
-authentication_information_client = None
+# authentication_information_client = None
 if allowed_authentication_methods[0] == "custom":
     authentication_information_client = {"test": "retest", "foo": "bar"}
 
