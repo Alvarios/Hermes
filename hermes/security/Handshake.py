@@ -182,9 +182,6 @@ class Handshake:
         :param allowed_protocol_versions: A list of allowed authentication method. All elements in the list must be
         in Handshake.PROTOCOL_VERSIONS_AVAILABLE.
         """
-        # TODO : Manage error when received message is corrupted.
-        # TODO : Manage error when received message format is incorrect.
-        # TODO : Release next version.
         self.role = role
         self._last_step = 0
         self._peer_public_key = None
