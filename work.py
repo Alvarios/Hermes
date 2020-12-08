@@ -22,7 +22,7 @@ from hermes.security.Handshake import Handshake
 from hermes.security.utils import derive_password_scrypt
 import os
 
-allowed_authentication_methods = ["password"]
+allowed_authentication_methods = ["custom"]
 password_to_derive = b"test"
 password_salt = os.urandom(16)
 password_client = b"test"
@@ -31,10 +31,13 @@ derived_password = derive_password_scrypt(password_salt=password_salt, password_
 authentication_information_server = {
     "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                  Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_client}
+if allowed_authentication_methods[0] == "custom":
+    authentication_information_client = {"test": "retest", "foo": "bar"}
 
 server = Handshake(role=Handshake.SERVER, authentication_information=authentication_information_server,
                    allowed_authentication_methods=allowed_authentication_methods)
-authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_client}
+
 client = Handshake(role=Handshake.CLIENT, authentication_information=authentication_information_client,
                    allowed_authentication_methods=allowed_authentication_methods)
 
@@ -62,6 +65,11 @@ auth_info = client.next_message()
 print(int.from_bytes(auth_info.topic, 'little'))
 print(auth_info.to_bytes())
 server.add_message(auth_info)
+if allowed_authentication_methods[0] == "custom":
+    if server.get_authentication_information() == authentication_information_client:
+        server.approve()
+    else:
+        server.disapprove()
 
 co_status = server.next_message()
 print(int.from_bytes(co_status.topic, 'little'))

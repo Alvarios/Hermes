@@ -181,12 +181,9 @@ class Handshake:
         in Handshake.PROTOCOL_VERSIONS_AVAILABLE.
         """
         # TODO : authentication_information vs allowed_authentication_methods for server ??
-        # TODO : Check custom authentication info are encoded
         # TODO : Manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
-        # TODO : Take a look to string and bytes encoding (use base64 everywhere?)
         # TODO : Check authentication behaviour when authentication info is None
-        # TODO : Put random bits inside encrypted part of authentication msg or encypt all payload
         self.role = role
         self._last_step = 0
         self._peer_public_key = None
@@ -290,7 +287,8 @@ class Handshake:
             return self._nxt_msg_connection_failed()
         payload = b""
         if self._selected_authentication_method == "password":
-            authentication_information = self._authentication_information[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY].decode("ascii")
+            authentication_information = self._authentication_information[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY]\
+                .decode("utf8")
             random_bits = base64.b64encode(os.urandom(Handshake.RANDOM_BITS_LENGTH)).decode("ascii")
             payload = str.encode(json.dumps(
                 {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
@@ -470,7 +468,7 @@ class Handshake:
             self._connection_status = Handshake.CONNECTION_STATUS_WAIT_APPROVAL
             self._custom_authentication_info = payload[Handshake.CUSTOM_AUTH_METHOD_INFO_KEY]
             return
-        password = str.encode(payload[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY], 'ascii')
+        password = str.encode(payload[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY], 'utf8')
         self._authentication_approved = self._verify_password(password)
 
     def get_shared_key(self) -> bytes:
