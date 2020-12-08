@@ -1,4 +1,4 @@
-from hermes.security.utils import verify_password_scrypt, derive_password_scrypt, derive_key_hkdf
+from hermes.security.utils import verify_password_scrypt, derive_password_scrypt, derive_key_hkdf, generate_key_32
 import os
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives import hashes
@@ -109,5 +109,45 @@ def test_derive_key_hkdf_return_exactly_the_same_key_than_hkdf_derivation_if_sam
 
     # Then
     assert result == expected_result
+
+
+def test_generate_key_32_create_a_key_of_32_bytes():
+    # Given
+    expected_length = 32
+
+    # When
+    result = generate_key_32()
+
+    # Then
+    assert len(result) == expected_length
+    assert type(result) == bytes
+
+
+def test_generate_key_create_different_key_when_called_multiple_times():
+    # Given
+    baseline = generate_key_32()
+
+    # When
+    result = generate_key_32()
+    if result == baseline:
+        result = generate_key_32()
+
+    # Then
+    assert baseline != result
+
+
+def test_generate_key_32_can_create_key_from_input_key():
+    # Given
+    key1 = b"test"
+    key2 = b"another_test"
+    baseline = generate_key_32(key1)
+
+    # When
+    result1 = generate_key_32(key1)
+    result2 = generate_key_32(key2)
+
+    # Then
+    assert baseline == result1
+    assert baseline != result2
 
 # python -m pytest -s hermes/security/tests/test_utils.py -vv

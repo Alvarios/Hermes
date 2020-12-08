@@ -32,18 +32,21 @@ if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 """
-import time
 from typing import NoReturn, Optional, List, Tuple, Any, Union
 import socket
 from threading import Thread
-from cryptography.fernet import Fernet, InvalidToken
-
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+import os
 import multiprocessing as mp
+
+from hermes.security.utils import generate_key_32
 
 
 class UDPSocket:
     """A socket for UDP communication.
 
+        Constants :
+            NONCE_LENGTH : The length of nonce used for encryption (in bytes).
 
         Attributes :
             socket_ip: The ip used to bind the socket.
@@ -55,7 +58,7 @@ class UDPSocket:
             socket : The socket object used for udp communication.
             is_running : A flag that specify if the socket is currently running.
             key : The encryption key used to encrypt message. If no value is provided it will generate a new one.
-            fernet_encoder : The encoder used to encrypt and decrypt messages.
+            encoder : The encoder used to encrypt and decrypt messages.
             enable_multicast : Specify if the socket can use multicast.
             multicast_ttl : The TTL used for multicast.
             must_listen : Define if the socket must listen for messages.
@@ -63,8 +66,8 @@ class UDPSocket:
             run_new_process : Specify if the UDPSocket instance must be run in a new process.
             internal_pipe : Internal side of the pipe used for communication with the process.
             external_pipe : External side of the pipe used for communication with the process.
-
     """
+    NONCE_LENGTH = 12
 
     def __init__(self, socket_ip: Optional[str] = "127.0.0.1", socket_port: Optional[int] = 50000,
                  encryption_in_transit: Optional[bool] = False, max_queue_size: Optional[int] = 100,
@@ -94,8 +97,8 @@ class UDPSocket:
         self.queue: List[Tuple[bytes, Any]] = []
         self.socket: Union[socket.socket, None] = None
         self.is_running: bool = False
-        self.key: bytes = key if key is not None else Fernet.generate_key()
-        self.fernet_encoder: Union[Fernet, None] = None
+        self.key: bytes = key if key is not None else generate_key_32()
+        self.encoder: Union[ChaCha20Poly1305, None] = None
         self.enable_multicast: bool = enable_multicast
         self.multicast_ttl: int = multicast_ttl
         self.must_listen = must_listen
@@ -143,7 +146,7 @@ class UDPSocket:
     def _setup(self):
         """Setup function of the class."""
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        self.fernet_encoder = Fernet(self.key)
+        self.encoder = ChaCha20Poly1305(self.key)
         self.socket.setblocking(self.setblocking)
         self.socket.bind((self.socket_ip, self.socket_port))
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -173,15 +176,12 @@ class UDPSocket:
                 if len(self.queue) >= self.max_queue_size:
                     raise BufferError
                 if self.encryption_in_transit:
-                    try:
-                        rcv_msg = (self.fernet_encoder.decrypt(rcv_msg[0]), rcv_msg[1])
-                    except InvalidToken:
-                        pass
+                    rcv_msg = (self._decrypt(rcv_msg[0]), rcv_msg[1])
                 self.queue.append(rcv_msg)
             except OSError:
                 pass
 
-    def sendto(self, msg: Optional[bytes] = bytes,
+    def sendto(self, msg: Optional[bytes] = bytes(),
                address_port: Optional[Union[Tuple[str, int], None]] = None,
                skip_encryption: Optional[bool] = False) -> NoReturn:
         """Call to _sendto.
@@ -189,7 +189,7 @@ class UDPSocket:
         :param msg: The data to send.
         :param address_port: A tuple of ip address and port of the target network endpoint.
         :param skip_encryption: If encryption_in_transit is set, skip_encryption will disable the encryption for
-                                this message.
+        this message.
         """
         if self.run_new_process is False:
             return self._sendto(msg=msg, address_port=address_port, skip_encryption=skip_encryption)
@@ -199,7 +199,7 @@ class UDPSocket:
             pass
         return self.external_pipe.recv()
 
-    def _sendto(self, msg: Optional[bytes] = bytes,
+    def _sendto(self, msg: Optional[bytes] = bytes(),
                 address_port: Optional[Union[Tuple[str, int], None]] = None,
                 skip_encryption: Optional[bool] = False) -> NoReturn:
         """Send a message to given network endpoint.
@@ -209,8 +209,8 @@ class UDPSocket:
         :param skip_encryption: If encryption_in_transit is set, skip_encryption will disable the encryption for
                                 this message.
         """
-        if self.encryption_in_transit and (not skip_encryption):
-            msg = self.fernet_encoder.encrypt(msg)
+        if self.encryption_in_transit and not skip_encryption:
+            msg = self._encrypt(msg)
         try:
             self.socket.sendto(msg, address_port)
         except OSError:
@@ -255,9 +255,33 @@ class UDPSocket:
         return self.external_pipe.recv()
 
     def _change_key(self, new_key: bytes) -> NoReturn:
-        """Change the encryption key of the socket and create a new fernet_encoder.
+        """Change the encryption key of the socket and create a new encoder.
 
         :param new_key: The new key to use for encryption.
         """
         self.key = new_key
-        self.fernet_encoder = Fernet(self.key)
+        self.encoder = ChaCha20Poly1305(self.key)
+
+    def _encrypt(self, msg: bytes) -> bytes:
+        """Internal function used to encrypt data when encryption in transit is enabled.
+
+        :param msg: The message to encrypt.
+
+        :return: The message encrypted.
+        """
+        nonce = os.urandom(UDPSocket.NONCE_LENGTH)
+        return nonce + self.encoder.encrypt(nonce, msg, b"")
+
+    def _decrypt(self, encrypted_message: bytes) -> bytes:
+        """Internal function used to decrypt data when encryption in transit is enabled.
+
+        :param encrypted_message: The message to decrypt.
+
+        :return: The message decrypted if it is possible else the input message.
+        """
+        try:
+            return self.encoder.decrypt(encrypted_message[:UDPSocket.NONCE_LENGTH],
+                                        encrypted_message[UDPSocket.NONCE_LENGTH:],
+                                        b"")
+        except:
+            return encrypted_message

@@ -37,6 +37,7 @@ from cryptography.exceptions import InvalidKey, AlreadyFinalized
 from typing import Optional, Union
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+import os
 
 
 def verify_password_scrypt(password_to_verify: bytes, derived_password: bytes, password_salt: bytes):
@@ -103,3 +104,15 @@ def derive_key_hkdf(key: bytes, length: Optional[int] = 32, salt: Optional[Union
     :return: A derived key of given length as bytes.
     """
     return HKDF(algorithm=algorithm, length=length, salt=salt, info=info, ).derive(key)
+
+
+def generate_key_32(key: Optional[Union[bytes, None]] = None) -> bytes:
+    """Generate a 32 bytes key that can be used for encryption.
+
+    :param key: An optional key that can be used for key derivation.
+
+    :return: A key of 32 bytes.
+    """
+    if key is not None:
+        return derive_key_hkdf(key)
+    return os.urandom(32)
