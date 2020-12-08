@@ -186,6 +186,7 @@ class Handshake:
         # TODO : Manage error when received message format is incorrect.
         # TODO : Take a look to string and bytes encoding (use base64 everywhere?)
         # TODO : Check authentication behaviour when authentication info is None
+        # TODO : Put random bits inside encrypted part of authentication msg or encypt all payload
         self.role = role
         self._last_step = 0
         self._peer_public_key = None
@@ -224,8 +225,8 @@ class Handshake:
         """
         derived_password = self._authentication_information["password"][
             Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY]
-        if Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY not in self._authentication_information[
-            "password"].keys() or derived_password is None:
+        if Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY not in \
+                self._authentication_information["password"].keys() or derived_password is None:
             return True
         return verify_password_scrypt(password_to_verify=password_to_verify, derived_password=derived_password,
                                       password_salt=self._authentication_information["password"][
@@ -289,8 +290,7 @@ class Handshake:
             return self._nxt_msg_connection_failed()
         payload = b""
         if self._selected_authentication_method == "password":
-            authentication_information = base64.b64encode(self._encrypt(
-                self._authentication_information[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY])).decode("ascii")
+            authentication_information = self._authentication_information[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY].decode("ascii")
             random_bits = base64.b64encode(os.urandom(Handshake.RANDOM_BITS_LENGTH)).decode("ascii")
             payload = str.encode(json.dumps(
                 {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
@@ -301,6 +301,7 @@ class Handshake:
             payload = str.encode(json.dumps(
                 {Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME: self._selected_authentication_method,
                  Handshake.CUSTOM_AUTH_METHOD_INFO_KEY: self._authentication_information}), "utf8")
+        payload = self._encrypt(payload)
         return UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_TOPIC, payload=payload)
 
     def _nxt_msg_clt_connection_request(self) -> UDPMessage:
@@ -463,13 +464,14 @@ class Handshake:
         :param msg: The UDPMessage to read.
         """
         self._last_step = Handshake.AUTHENTICATION_TOPIC
-        payload = json.loads(bytes.decode(msg.payload, "utf8"))
+        payload = self._decrypt(msg.payload)
+        payload = json.loads(bytes.decode(payload, "utf8"))
         if payload[Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME] == "custom":
             self._connection_status = Handshake.CONNECTION_STATUS_WAIT_APPROVAL
             self._custom_authentication_info = payload[Handshake.CUSTOM_AUTH_METHOD_INFO_KEY]
             return
-        password = base64.b64decode(str.encode(payload[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY], 'ascii'))
-        self._authentication_approved = self._verify_password(self._decrypt(password))
+        password = str.encode(payload[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY], 'ascii')
+        self._authentication_approved = self._verify_password(password)
 
     def get_shared_key(self) -> bytes:
         """Return the resulting key after Diffie-Hellman key exchange.

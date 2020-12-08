@@ -31,8 +31,9 @@ def test_hand_shake_verify_password_return_true_if_given_password_is_correct_and
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
-
-    server = Handshake(role=Handshake.SERVER, authentication_information=authentication_information_server)
+    allowed_authentication_methods = ["password"]
+    server = Handshake(role=Handshake.SERVER, authentication_information=authentication_information_server,
+                       allowed_authentication_methods=allowed_authentication_methods)
     # When
     result = server._verify_password(password_to_verify=password_to_verify)
 
@@ -46,6 +47,7 @@ def test_hand_shake_verify_password_return_false_if_given_password_is_incorrect_
     password_to_derive = b"test_password"
     password_salt = os.urandom(16)
     expected_result = False
+    allowed_authentication_methods = ["password"]
 
     # derive
     kdf = Scrypt(
@@ -61,7 +63,8 @@ def test_hand_shake_verify_password_return_false_if_given_password_is_incorrect_
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
-    server = Handshake(role=role, authentication_information=authentication_information_server)
+    server = Handshake(role=role, authentication_information=authentication_information_server,
+                       allowed_authentication_methods=allowed_authentication_methods)
     # When
     result = server._verify_password(password_to_verify=password_to_verify)
 
@@ -71,6 +74,7 @@ def test_hand_shake_verify_password_return_false_if_given_password_is_incorrect_
 
 def test_hand_shake_verify_password_return_true_in_any_cas_if_no_derived_password_and_role_is_server():
     # Given
+    allowed_authentication_methods = ["password"]
     passwords_to_verify = [b"", b"incorrect_password", b"test_password"]
     derived_password = None
     expected_result = True
@@ -80,7 +84,8 @@ def test_hand_shake_verify_password_return_true_in_any_cas_if_no_derived_passwor
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: None}}
 
-    server = Handshake(role=role, authentication_information=authentication_information_server)
+    server = Handshake(role=role, authentication_information=authentication_information_server,
+                       allowed_authentication_methods=allowed_authentication_methods)
     # When
     results = [server._verify_password(password_to_verify=password) for password in passwords_to_verify]
 
@@ -277,8 +282,8 @@ def test_next_message_return_authentication_message_when_connection_step_4_and_r
     # Given
     password_to_derive = b"test"
     password_salt = os.urandom(16)
-    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     allowed_authentication_method = ["password"]
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
     authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_to_derive}
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
@@ -298,14 +303,15 @@ def test_next_message_return_authentication_message_when_connection_step_4_and_r
 
     # When
     result = client.next_message()
-    payload = json.loads(bytes.decode(result.payload, "utf8"))
-    password = base64.b64decode(str.encode(payload[Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY], 'ascii'))
+    payload = client._decrypt(result.payload)
+    payload = json.loads(bytes.decode(payload, "utf8"))
+    password = payload["password"]
 
     # Then
     assert int.from_bytes(result.msg_id, 'little') == expected_id
     assert int.from_bytes(result.topic, 'little') == expected_topic
 
-    assert server._decrypt(password) == password_to_derive
+    assert password == password_to_derive.decode('ascii')
 
 
 def test_next_message_return_connection_approved_message_when_connection_step_6_and_role_is_server_and_password_ok():
@@ -486,6 +492,7 @@ def test_get_status_return_failed_when_authentication_is_incorrect():
 
 def test_get_status_return_approved_when_authentication_is_correct():
     # Given
+    allowed_authentication_methods = ["password"]
     password_to_derive = b"test"
     password_salt = os.urandom(16)
     password_client = b"test"
@@ -493,9 +500,11 @@ def test_get_status_return_approved_when_authentication_is_correct():
     authentication_information_server = {
         "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
                      Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
-    server = Handshake(role=Handshake.SERVER, authentication_information=authentication_information_server)
+    server = Handshake(role=Handshake.SERVER, authentication_information=authentication_information_server,
+                       allowed_authentication_methods=allowed_authentication_methods)
     authentication_information_client = {Handshake.PASSWORD_AUTH_METHOD_PASSWORD_KEY: password_client}
-    client = Handshake(role=Handshake.CLIENT, authentication_information=authentication_information_client)
+    client = Handshake(role=Handshake.CLIENT, authentication_information=authentication_information_client,
+                       allowed_authentication_methods=allowed_authentication_methods)
 
     server.add_message(client.next_message())
     client.add_message(server.next_message())
@@ -780,7 +789,8 @@ def test_authentication_message_select_password_method_if_it_is_the_only_authent
     authentication_message = client.next_message()
 
     # When
-    result = json.loads(bytes.decode(authentication_message.payload, "utf8"))
+    payload = client._decrypt(authentication_message.payload)
+    result = json.loads(bytes.decode(payload, "utf8"))
 
     # Then
     assert Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME in result.keys()
@@ -802,7 +812,8 @@ def test_authentication_message_select_custom_method_if_it_is_the_only_authentic
     authentication_message = client.next_message()
 
     # When
-    result = json.loads(bytes.decode(authentication_message.payload, "utf8"))
+    payload = client._decrypt(authentication_message.payload)
+    result = json.loads(bytes.decode(payload, "utf8"))
 
     # Then
     assert result[Handshake.SELECTED_AUTHENTICATION_METHOD_KEY_NAME] == "custom"
@@ -889,7 +900,8 @@ def test_authentication_message_contain_random_bits_of_correct_length():
 
     # When
     result = client.next_message()
-    payload = json.loads(bytes.decode(result.payload, "utf8"))
+    payload = client._decrypt(result.payload)
+    payload = json.loads(bytes.decode(payload, "utf8"))
 
     # Then
     assert int.from_bytes(result.msg_id, 'little') == expected_id
