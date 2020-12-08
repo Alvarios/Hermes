@@ -742,7 +742,14 @@ def test_allowed_authentication_methods_default_value_is_no_authentication():
 def test_authentication_is_required_if_password_is_provided_as_authentication_method():
     # Given
     allowed_authentication_methods = ["password"]
-    server = Handshake(role=Handshake.SERVER, allowed_authentication_methods=allowed_authentication_methods)
+    password_salt = os.urandom(16)
+    password_to_derive = b"test"
+    derived_password = derive_password_scrypt(password_salt=password_salt, password_to_derive=password_to_derive)
+    authentication_information_server = {
+        "password": {Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY: derived_password,
+                     Handshake.PASSWORD_AUTH_METHOD_SALT_KEY: password_salt}}
+    server = Handshake(role=Handshake.SERVER, allowed_authentication_methods=allowed_authentication_methods,
+                       authentication_information=authentication_information_server)
     client = Handshake(role=Handshake.CLIENT, allowed_authentication_methods=allowed_authentication_methods)
 
     server.add_message(client.next_message())
@@ -1035,5 +1042,29 @@ def test_next_message_return_connection_failed_msg_when_connection_step_6_and_ro
     # Then
     assert int.from_bytes(result.msg_id, 'little') == expected_id
     assert int.from_bytes(result.topic, 'little') == expected_topic
+
+
+def test_new_server_raise_error_when_password_auth_is_allowed_but_no_auth_info_are_given():
+    # Given
+    allowed_authentication_method = ["password"]
+
+    # When
+
+    # Then
+    with pytest.raises(AttributeError):
+        Handshake(role=Handshake.SERVER, allowed_authentication_methods=allowed_authentication_method)
+
+
+def test_new_server_raise_error_when_password_auth_is_allowed_but_incomplete_auth_info_are_given():
+    # Given
+    allowed_authentication_method = ["password"]
+    auth_info = {"password": {}}
+
+    # When
+
+    # Then
+    with pytest.raises(AttributeError):
+        Handshake(role=Handshake.SERVER, allowed_authentication_methods=allowed_authentication_method,
+                  authentication_information=auth_info)
 
 # python -m pytest -s hermes/security/tests/test_Handshake.py -vv

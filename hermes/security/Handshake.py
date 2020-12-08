@@ -182,7 +182,6 @@ class Handshake:
         :param allowed_protocol_versions: A list of allowed authentication method. All elements in the list must be
         in Handshake.PROTOCOL_VERSIONS_AVAILABLE.
         """
-        # TODO : authentication_information vs allowed_authentication_methods for server ??
         # TODO : Manage error when received message is corrupted.
         # TODO : Manage error when received message format is incorrect.
         # TODO : Release next version.
@@ -194,7 +193,6 @@ class Handshake:
         if authentication_information is None:
             authentication_information = {}
         self._authentication_information = authentication_information
-
         self._authentication_approved = False
         self._connection_status = Handshake.CONNECTION_STATUS_INCOMPLETE
         if allowed_protocol_versions is None:
@@ -216,6 +214,15 @@ class Handshake:
             raise NotImplementedError("Multiple authentication method for client is not supported yet.")
         self._selected_authentication_method: Union[None, str] = None
         self._custom_authentication_info = {}
+        if "password" in allowed_authentication_methods and self.role == Handshake.SERVER:
+            if "password" not in authentication_information.keys():
+                raise AttributeError("You must provide authentication information if password"
+                                     " authentication method is available.")
+            if Handshake.PASSWORD_AUTH_METHOD_SALT_KEY not in authentication_information[
+                "password"].keys() or Handshake.PASSWORD_AUTH_METHOD_DERIVED_PASSWORD_KEY not in \
+                    authentication_information["password"].keys():
+                raise AttributeError("You must provide authentication information if password"
+                                     " authentication method is available.")
 
     def _verify_password(self, password_to_verify: bytes) -> bool:
         """Check if the input password correspond to the instance derived password and salt.
