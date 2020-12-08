@@ -32,7 +32,7 @@ def test_new_udp_message_created_with_correct_msg_id_when_type_bytes():
     msg_id = bytes([48, 48, 48, 48])
 
     # When
-    msg = UDPMessage(msg_id=msg_id)
+    msg = UDPMessage(code=msg_id)
 
     # Then
     assert msg.msg_id == msg_id
@@ -44,7 +44,7 @@ def test_new_udp_message_created_with_correct_msg_id_when_type_int():
     msg_id = 1
 
     # When
-    msg = UDPMessage(msg_id=msg_id)
+    msg = UDPMessage(code=msg_id)
 
     # Then
     assert msg.msg_id == expected_msg_id
@@ -90,7 +90,7 @@ def test_new_udp_message_created_with_correct_message_nb_when_type_bytes():
     message_nb = bytes(UDPMessage.MSG_NUMBER_LENGTH * [1])
 
     # When
-    msg = UDPMessage(message_nb=message_nb)
+    msg = UDPMessage(subtopic=message_nb)
 
     # Then
     assert msg.message_nb == message_nb
@@ -102,7 +102,7 @@ def test_new_udp_message_created_with_correct_message_nb_when_type_int():
     message_nb = 1
 
     # When
-    msg = UDPMessage(message_nb=message_nb)
+    msg = UDPMessage(subtopic=message_nb)
 
     # Then
     assert msg.message_nb == expected_message_nb
@@ -116,7 +116,7 @@ def test_new_udp_message_created_with_correct_crc():
     topic = bytes([1, 0, 0, 0])
 
     # When
-    msg = UDPMessage(message_nb=message_nb, payload=payload, msg_id=msg_id, topic=topic)
+    msg = UDPMessage(subtopic=message_nb, payload=payload, code=msg_id, topic=topic)
     full_content = msg.msg_id + msg.time_creation + msg.topic + msg.message_nb + msg.payload
     expected_crc = zlib.crc32(full_content).to_bytes(UDPMessage.CRC_LENGTH, 'little')
 
@@ -129,7 +129,7 @@ def test_new_udp_message_created_with_correct_message_id_length_when_input_too_s
     msg_id = bytes([1, 0])
 
     # When
-    msg = UDPMessage(msg_id=msg_id)
+    msg = UDPMessage(code=msg_id)
 
     # Then
     assert len(msg.msg_id) == UDPMessage.MSG_ID_LENGTH
@@ -143,7 +143,7 @@ def test_new_udp_message_throw_error_when_input_message_id_too_big():
 
     # Then
     with pytest.raises(ValueError):
-        UDPMessage(msg_id=msg_id)
+        UDPMessage(code=msg_id)
 
 
 def test_new_udp_message_created_with_correct_topic_length_when_input_too_small():
@@ -173,7 +173,7 @@ def test_new_udp_message_created_with_correct_message_nb_length_when_input_too_s
     msg_nb = bytes([1])
 
     # When
-    msg = UDPMessage(message_nb=msg_nb)
+    msg = UDPMessage(subtopic=msg_nb)
 
     # Then
     assert len(msg.message_nb) == UDPMessage.MSG_NUMBER_LENGTH
@@ -187,7 +187,7 @@ def test_new_udp_message_throw_error_when_input_message_nb_too_big():
 
     # Then
     with pytest.raises(ValueError):
-        UDPMessage(message_nb=msg_nb)
+        UDPMessage(subtopic=msg_nb)
 
 
 def test_check_crc_returns_true_when_crc_correct():
@@ -198,7 +198,7 @@ def test_check_crc_returns_true_when_crc_correct():
     topic = bytes([1, 0, 0, 0])
 
     # When
-    msg = UDPMessage(message_nb=message_nb, payload=payload, msg_id=msg_id, topic=topic)
+    msg = UDPMessage(subtopic=message_nb, payload=payload, code=msg_id, topic=topic)
 
     # Then
     assert msg.check_crc() is True
@@ -212,7 +212,7 @@ def test_check_crc_returns_false_when_crc_incorrect():
     topic = bytes([1, 0, 0, 0])
 
     # When
-    msg = UDPMessage(message_nb=message_nb, payload=payload, msg_id=msg_id, topic=topic)
+    msg = UDPMessage(subtopic=message_nb, payload=payload, code=msg_id, topic=topic)
     msg.full_content = bytes()
 
     # Then
@@ -227,7 +227,7 @@ def test_to_bytes_returns_full_message_as_bytes():
     topic = bytes([1, 0, 0, 0])
 
     # When
-    msg = UDPMessage(message_nb=message_nb, payload=payload, msg_id=msg_id, topic=topic)
+    msg = UDPMessage(subtopic=message_nb, payload=payload, code=msg_id, topic=topic)
     expected_result = msg.full_content + msg.crc
 
     # Then
@@ -242,7 +242,7 @@ def test_from_bytes_correctly_load_a_message():
     topic = bytes([1, 0, 0, 0])
 
     # When
-    msg = UDPMessage(message_nb=message_nb, payload=payload, msg_id=msg_id, topic=topic)
+    msg = UDPMessage(subtopic=message_nb, payload=payload, code=msg_id, topic=topic)
     result = UDPMessage.from_bytes(msg.to_bytes())
 
     # Then
@@ -262,7 +262,7 @@ def test_from_bytes_returns_none_if_message_is_corrupted():
     topic = bytes([1, 0, 0, 0])
 
     # When
-    msg = UDPMessage(message_nb=message_nb, payload=payload, msg_id=msg_id, topic=topic)
+    msg = UDPMessage(subtopic=message_nb, payload=payload, code=msg_id, topic=topic)
     msg.crc = bytes()
     result = UDPMessage.from_bytes(msg.to_bytes())
 

@@ -184,7 +184,7 @@ def test_next_message_return_connection_approved_message_when_connection_step_4_
     server = Handshake(role=Handshake.SERVER, allowed_authentication_methods=allowed_authentication_method)
     client = Handshake(role=Handshake.CLIENT, allowed_authentication_methods=allowed_authentication_method)
 
-    expected_message = UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CONNECTION_APPROVED_TOPIC)
+    expected_message = UDPMessage(code=codes.HANDSHAKE, topic=Handshake.CONNECTION_APPROVED_TOPIC)
 
     server.add_message(client.next_message())
     client.add_message(server.next_message())
@@ -210,7 +210,7 @@ def test_next_message_return_authentication_required_message_when_connection_ste
                        authentication_information=authentication_information_server)
     client = Handshake(role=Handshake.CLIENT, allowed_authentication_methods=allowed_authentication_method)
 
-    expected_message = UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_REQUIRED_TOPIC)
+    expected_message = UDPMessage(code=codes.HANDSHAKE, topic=Handshake.AUTHENTICATION_REQUIRED_TOPIC)
 
     server.add_message(client.next_message())
     client.add_message(server.next_message())
@@ -383,7 +383,7 @@ def test_connection_request_message_contains_a_list_of_available_protocols():
     # Given
     role = Handshake.CLIENT
     client = Handshake(role=role)
-    expected_message = UDPMessage(msg_id=codes.HANDSHAKE, topic=Handshake.CONNECTION_REQUEST_TOPIC)
+    expected_message = UDPMessage(code=codes.HANDSHAKE, topic=Handshake.CONNECTION_REQUEST_TOPIC)
     connection_request_message = client.next_message()
 
     # When
