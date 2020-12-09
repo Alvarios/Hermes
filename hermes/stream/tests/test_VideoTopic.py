@@ -1,4 +1,4 @@
-from hermes.stream.VideoStream import VideoTopic
+from hermes.stream.VideoTopic import VideoTopic
 from hermes.stream.ImageManager import ImageManager
 from hermes.messages.UDPMessage import UDPMessage
 from math import pow
