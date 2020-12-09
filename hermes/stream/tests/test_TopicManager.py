@@ -1,4 +1,6 @@
-from hermes.stream.VideoStream import TopicManager, ImageManager, VideoTopic
+from hermes.stream.TopicManager import TopicManager
+from hermes.stream.VideoTopic import VideoTopic
+from hermes.stream.ImageManager import ImageManager
 from hermes.messages.UDPMessage import UDPMessage
 import numpy as np
 import pytest

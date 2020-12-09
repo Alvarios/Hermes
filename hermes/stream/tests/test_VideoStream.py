@@ -1,5 +1,6 @@
 import multiprocessing as mp
-from hermes.stream.VideoStream import VideoStream, ImageManager
+from hermes.stream.VideoStream import VideoStream
+from hermes.stream.ImageManager import ImageManager
 import numpy as np
 import pytest
 import time
@@ -168,7 +169,7 @@ def test_two_video_stream_can_transmit_images():
         pass
     emitter.refresh_image(expected_img)
     emitter.add_subscriber(consumer_address_port)
-    time.sleep(.001)
+    time.sleep(.01)
 
     # When
     result = consumer.get_rcv_img()
