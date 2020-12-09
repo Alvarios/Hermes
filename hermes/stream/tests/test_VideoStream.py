@@ -169,7 +169,7 @@ def test_two_video_stream_can_transmit_images():
         pass
     emitter.refresh_image(expected_img)
     emitter.add_subscriber(consumer_address_port)
-    time.sleep(.001)
+    time.sleep(.01)
 
     # When
     result = consumer.get_rcv_img()

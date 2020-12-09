@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Implementation utils that can be use to stream video using UDP protocol.
+"""Implementation of a class that can be used to stream video using UDP protocol.
 
     Copyright (C) 2020  Clement Dulouard
 
@@ -127,6 +127,8 @@ class VideoStream:
         self.is_running: bool = False
         self.enable_multicast: bool = enable_multicast
         self.multicast_ttl: int = multicast_ttl
+        if self.enable_multicast:
+            raise NotImplementedError
         self.key: bytes = key
         self.subs_list: List[Tuple[str, int]] = []
         self.tm = TopicManager()
