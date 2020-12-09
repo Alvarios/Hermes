@@ -7,7 +7,7 @@ The emitter of this script can be the script video_stream_emitter.py
 Press ESC to quit the example while running.
 """
 
-from hermes.streams.VideoStream import VideoStream
+from hermes.stream.VideoStream import VideoStream
 import cv2
 import datetime
 

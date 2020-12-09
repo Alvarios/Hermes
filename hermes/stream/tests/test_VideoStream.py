@@ -1,5 +1,6 @@
 import multiprocessing as mp
-from hermes.streams.VideoStream import VideoStream, ImageManager
+from hermes.stream.VideoStream import VideoStream
+from hermes.stream.ImageManager import ImageManager
 import numpy as np
 import pytest
 import time
@@ -64,7 +65,7 @@ def test_video_stream_is_created_with_correct_role():
 
 def test_video_stream_cannot_be_created_with_unexpected_role():
     # Given
-    role = "test"
+    role = "tests"
 
     # When
 
@@ -168,7 +169,7 @@ def test_two_video_stream_can_transmit_images():
         pass
     emitter.refresh_image(expected_img)
     emitter.add_subscriber(consumer_address_port)
-    time.sleep(.001)
+    time.sleep(.01)
 
     # When
     result = consumer.get_rcv_img()
@@ -179,4 +180,32 @@ def test_two_video_stream_can_transmit_images():
     assert np.array_equiv(result, expected_img)
 
 
-# python -m pytest -s -vv streams/test/test_VideoStream.py
+def test_two_video_stream_can_transmit_encrypted_images():
+    # Given
+    expected_img = np.array(4 * [4 * 4 * [[0, 0, 0]]])
+    emitter_address_port = ('127.0.0.1', 60014)
+    consumer_address_port = ('127.0.0.1', 60015)
+    emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
+                          socket_port=emitter_address_port[1], encryption_in_transit=True).start()
+    while emitter.get_is_running() is False:
+        pass
+    key = emitter.get_key()
+    consumer = VideoStream(role=VideoStream.CONSUMER, socket_ip=consumer_address_port[0],
+                           socket_port=consumer_address_port[1], use_rcv_img_buffer=False,
+                           buffer_size=1000000, encryption_in_transit=True, key=key).start()
+
+    while consumer.get_is_running() is False:
+        pass
+    emitter.refresh_image(expected_img)
+    emitter.add_subscriber(consumer_address_port)
+    time.sleep(.001)
+
+    # When
+    result = consumer.get_rcv_img()
+    emitter.stop()
+    consumer.stop()
+
+    # Then
+    assert np.array_equiv(result, expected_img)
+
+# python -m pytest -s -vv hermes/stream/tests/test_VideoStream.py

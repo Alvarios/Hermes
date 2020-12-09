@@ -1,4 +1,5 @@
-from hermes.streams.VideoStream import ImageManager, VideoTopic
+from hermes.stream.VideoTopic import VideoTopic
+from hermes.stream.ImageManager import ImageManager
 from hermes.messages.UDPMessage import UDPMessage
 from math import pow
 import pytest
@@ -156,8 +157,8 @@ def test_add_messages_correctly_add_messages_to_rcv_messages():
     length = 10
     vt = VideoTopic(nb_packet=nb_packet, total_bytes=total_bytes, height=height, length=length, pixel_size=pixel_size,
                     time_creation=creation)
-    test_msg1 = UDPMessage(message_nb=1)
-    test_msg2 = UDPMessage(message_nb=2, payload=bytes([1]))
+    test_msg1 = UDPMessage(subtopic=1)
+    test_msg2 = UDPMessage(subtopic=2, payload=bytes([1]))
 
     # When
     vt.add_message(test_msg1)
@@ -179,7 +180,7 @@ def test_add_messages_set_rcv_error_to_true_if_message_nb_greater_than_nb_packet
     vt = VideoTopic(nb_packet=nb_packet, total_bytes=total_bytes, height=height, length=length, pixel_size=pixel_size,
                     time_creation=creation)
     message_nb = 4
-    test_msg = UDPMessage(message_nb=message_nb)
+    test_msg = UDPMessage(subtopic=message_nb)
 
     # When
     vt.add_message(test_msg)
@@ -222,7 +223,7 @@ def test_all_msg_received_return_true_if_all_messages_have_been_received():
                     time_creation=creation)
 
     for i in range(nb_packet):
-        vt.add_message(UDPMessage(message_nb=i + 1))
+        vt.add_message(UDPMessage(subtopic=i + 1))
 
     # When
     result = vt.all_msg_received()
@@ -243,7 +244,7 @@ def test_total_bytes_correct_return_true_if_expected_number_of_bytes_is_the_same
                     time_creation=creation)
 
     for i in range(nb_packet):
-        vt.add_message(UDPMessage(message_nb=i + 1, payload=bytes(25 * [0])))
+        vt.add_message(UDPMessage(subtopic=i + 1, payload=bytes(25 * [0])))
 
     # When
     result = vt.total_bytes_correct()
@@ -265,7 +266,7 @@ def test_rebuild_img_return_none_if_total_bytes_modulo_pixel_size_is_not_0():
                     time_creation=creation)
 
     for i in range(nb_packet):
-        vt.add_message(UDPMessage(message_nb=i + 1, payload=bytes(25 * [0])))
+        vt.add_message(UDPMessage(subtopic=i + 1, payload=bytes(25 * [0])))
 
     # When
     result = vt.rebuild_img()
@@ -287,7 +288,7 @@ def test_rebuild_img_return_none_if_total_bytes_modulo_height_is_not_0():
                     time_creation=creation)
 
     for i in range(nb_packet):
-        vt.add_message(UDPMessage(message_nb=i + 1, payload=bytes(25 * [0])))
+        vt.add_message(UDPMessage(subtopic=i + 1, payload=bytes(25 * [0])))
 
     # When
     result = vt.rebuild_img()
@@ -309,7 +310,7 @@ def test_rebuild_img_return_none_if_total_bytes_modulo_length_is_not_0():
                     time_creation=creation)
 
     for i in range(nb_packet):
-        vt.add_message(UDPMessage(message_nb=i + 1, payload=bytes(25 * [0])))
+        vt.add_message(UDPMessage(subtopic=i + 1, payload=bytes(25 * [0])))
 
     # When
     result = vt.rebuild_img()
@@ -331,7 +332,7 @@ def test_rebuild_img_return_numpy_array_as_expected_for_pixel_size_3():
                     time_creation=creation)
 
     for i in range(nb_packet):
-        vt.add_message(UDPMessage(message_nb=i + 1, payload=bytes(30 * [0])))
+        vt.add_message(UDPMessage(subtopic=i + 1, payload=bytes(30 * [0])))
 
     # When
     result = vt.rebuild_img()
@@ -354,7 +355,7 @@ def test_rebuild_img_return_numpy_array_as_expected_for_pixel_size_1():
                     time_creation=creation)
 
     for i in range(nb_packet):
-        vt.add_message(UDPMessage(message_nb=i + 1, payload=bytes(10 * [0])))
+        vt.add_message(UDPMessage(subtopic=i + 1, payload=bytes(10 * [0])))
 
     # When
     result = vt.rebuild_img()

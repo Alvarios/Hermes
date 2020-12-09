@@ -5,7 +5,7 @@ This script get the flux from the camera and send it to given ip and port.
 The consumer of this script can be the script video_stream_consumer.py
 """
 
-from hermes.streams.VideoStream import VideoStream
+from hermes.stream.VideoStream import VideoStream
 import cv2
 
 if __name__ == "__main__":
