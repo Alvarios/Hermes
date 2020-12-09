@@ -1,5 +1,6 @@
 import multiprocessing as mp
-from hermes.stream.VideoStream import VideoStream, ImageManager
+from hermes.stream.VideoStream import VideoStream
+from hermes.stream.ImageManager import ImageManager
 import numpy as np
 import pytest
 import time

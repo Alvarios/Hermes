@@ -1,4 +1,4 @@
-from hermes.stream.VideoStream import ImageManager
+from hermes.stream.ImageManager import ImageManager
 import numpy as np
 import pytest
 import collections
