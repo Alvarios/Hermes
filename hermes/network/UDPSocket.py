@@ -287,8 +287,10 @@ class UDPSocket:
             return encrypted_message
 
     def get_key(self) -> bytes:
-        """Return the _key used by the socket for encryption.
+        """Return the key used by the socket for encryption.
 
-        :return: The encryption _key of the server.
+        :return: The encryption key of the server.
         """
         return self._key
+
+

@@ -202,7 +202,6 @@ class VideoStream:
 
     def _setup(self) -> NoReturn:
         """Initialization of the process."""
-        self.is_running = True
         must_listen = self.role == VideoStream.CONSUMER
         self.udp_socket = UDPSocket(socket_ip=self.socket_ip, socket_port=self.socket_port,
                                     encryption_in_transit=self.encryption_in_transit,
@@ -212,6 +211,7 @@ class VideoStream:
         self.udp_socket.start()
         self.eye = None if self.from_source is None else Eye(src=self.from_source, run_new_process=False).start()
         self.im = self.im.start()
+        self.is_running = True
 
     def _loop(self) -> NoReturn:
         """The main loop of the process."""
@@ -369,8 +369,27 @@ class VideoStream:
         :return rcv_img: The received image.
         """
         if self.run_new_process is False:
-            return self.get_rcv_img()
+            return self._get_rcv_img()
         self.external_pipe.send((VideoStream._get_rcv_img, {}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    def _get_key(self) -> bytes:
+        """Return the key used by the socket for encryption.
+
+        :return: The encryption key of the server.
+        """
+        return self.udp_socket.get_key()
+
+    def get_key(self) -> bytes:
+        """External call to _get_key.
+
+        :return: The encryption key of the server.
+        """
+        if self.run_new_process is False:
+            return self._get_key()
+        self.external_pipe.send((VideoStream._get_key, {}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
