@@ -179,4 +179,4 @@ def test_two_video_stream_can_transmit_images():
     assert np.array_equiv(result, expected_img)
 
 
-# python -m pytest -s -vv stream/tests/test_VideoStream.py
+# python -m pytest -s -vv hermes/stream/tests/test_VideoStream.py

@@ -43,6 +43,7 @@ from hermes.polypheme.Eye import Eye
 from threading import Thread
 from itertools import chain
 import cv2
+import hermes.messages.codes as codes
 
 
 class VideoStream:
@@ -419,7 +420,6 @@ class ImageManager:
     LENGTH_SIZE = 4
     SIZE_PIXEL_SIZE = 1
     ENCODING_SIZE = 1
-    VIDEO_PACKET_ID = 210
     NB_MSG_HEADER = 0
     ENCODING_DICT = {1: ".jpg"}
 
@@ -519,7 +519,7 @@ class ImageManager:
         :param encoding: The encoding of the pixel (default 0 = None).
         :return header_msg: The UDPMessage containing image metadata.
         """
-        return UDPMessage(code=ImageManager.VIDEO_PACKET_ID, topic=topic, subtopic=ImageManager.NB_MSG_HEADER,
+        return UDPMessage(code=codes.VIDEO_STREAM, topic=topic, subtopic=ImageManager.NB_MSG_HEADER,
                           payload=nb_packet.to_bytes(ImageManager.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
                               ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE,
                                                                                          'little') + length.to_bytes(
@@ -544,7 +544,7 @@ class ImageManager:
         if self.async_msg_generation and (force is False):
             return self.messages
         img_split = self.split_image()
-        to_msg = lambda enum: UDPMessage(code=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
+        to_msg = lambda enum: UDPMessage(code=codes.VIDEO_STREAM, payload=enum[1], topic=topic,
                                          subtopic=enum[0] + 1).to_bytes()
         img_messages = map(to_msg, enumerate(img_split))
         header = ImageManager.get_header_msg(topic, math.ceil(np.array(
