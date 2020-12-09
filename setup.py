@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="hermes-alvarios",
-    version="0.2.2",
+    version="0.2.3",
     author="CDulouard",
     author_email="clement.dulouard@alvarios.com",
     description="Network tools for python.",

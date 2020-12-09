@@ -197,7 +197,7 @@ def test_new_udp_socket_correctly_set_encryption_key():
     udp_socket = UDPSocket(key=key, socket_port=50012).start()
 
     # Then
-    assert udp_socket.key == key
+    assert udp_socket.get_key() == key
     udp_socket.stop()
     time.sleep(.5)
 
@@ -209,7 +209,7 @@ def test_key_is_not_none_when_no_value_is_given():
     udp_socket = UDPSocket(socket_port=50013).start()
 
     # Then
-    assert udp_socket.key is not None
+    assert udp_socket.get_key() is not None
     udp_socket.stop()
     time.sleep(.5)
 
@@ -238,7 +238,7 @@ def test_change_key_correctly_change_the_key():
     udp_socket.change_key(key_new)
 
     # Then
-    assert udp_socket.key == key_new
+    assert udp_socket.get_key() == key_new
     udp_socket.stop()
     time.sleep(.5)
 

@@ -43,10 +43,11 @@ from hermes.polypheme.Eye import Eye
 from threading import Thread
 from itertools import chain
 import cv2
+import hermes.messages.codes as codes
 
 
 class VideoStream:
-    """A class to manage video streams.
+    """A class to manage video stream.
 
     This class inherit from Process to run the VideoStream on a different CPU core than parent process.
 
@@ -201,7 +202,6 @@ class VideoStream:
 
     def _setup(self) -> NoReturn:
         """Initialization of the process."""
-        self.is_running = True
         must_listen = self.role == VideoStream.CONSUMER
         self.udp_socket = UDPSocket(socket_ip=self.socket_ip, socket_port=self.socket_port,
                                     encryption_in_transit=self.encryption_in_transit,
@@ -211,6 +211,7 @@ class VideoStream:
         self.udp_socket.start()
         self.eye = None if self.from_source is None else Eye(src=self.from_source, run_new_process=False).start()
         self.im = self.im.start()
+        self.is_running = True
 
     def _loop(self) -> NoReturn:
         """The main loop of the process."""
@@ -368,8 +369,27 @@ class VideoStream:
         :return rcv_img: The received image.
         """
         if self.run_new_process is False:
-            return self.get_rcv_img()
+            return self._get_rcv_img()
         self.external_pipe.send((VideoStream._get_rcv_img, {}))
+        while self.external_pipe.poll() is False:
+            pass
+        return self.external_pipe.recv()
+
+    def _get_key(self) -> bytes:
+        """Return the key used by the socket for encryption.
+
+        :return: The encryption key of the server.
+        """
+        return self.udp_socket.get_key()
+
+    def get_key(self) -> bytes:
+        """External call to _get_key.
+
+        :return: The encryption key of the server.
+        """
+        if self.run_new_process is False:
+            return self._get_key()
+        self.external_pipe.send((VideoStream._get_key, {}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
@@ -419,7 +439,6 @@ class ImageManager:
     LENGTH_SIZE = 4
     SIZE_PIXEL_SIZE = 1
     ENCODING_SIZE = 1
-    VIDEO_PACKET_ID = 210
     NB_MSG_HEADER = 0
     ENCODING_DICT = {1: ".jpg"}
 
@@ -519,7 +538,7 @@ class ImageManager:
         :param encoding: The encoding of the pixel (default 0 = None).
         :return header_msg: The UDPMessage containing image metadata.
         """
-        return UDPMessage(code=ImageManager.VIDEO_PACKET_ID, topic=topic, subtopic=ImageManager.NB_MSG_HEADER,
+        return UDPMessage(code=codes.VIDEO_STREAM, topic=topic, subtopic=ImageManager.NB_MSG_HEADER,
                           payload=nb_packet.to_bytes(ImageManager.NB_PACKET_SIZE, 'little') + total_bytes.to_bytes(
                               ImageManager.TOTAL_BYTES_SIZE, 'little') + height.to_bytes(ImageManager.HEIGHT_SIZE,
                                                                                          'little') + length.to_bytes(
@@ -544,7 +563,7 @@ class ImageManager:
         if self.async_msg_generation and (force is False):
             return self.messages
         img_split = self.split_image()
-        to_msg = lambda enum: UDPMessage(code=ImageManager.VIDEO_PACKET_ID, payload=enum[1], topic=topic,
+        to_msg = lambda enum: UDPMessage(code=codes.VIDEO_STREAM, payload=enum[1], topic=topic,
                                          subtopic=enum[0] + 1).to_bytes()
         img_messages = map(to_msg, enumerate(img_split))
         header = ImageManager.get_header_msg(topic, math.ceil(np.array(

@@ -70,3 +70,4 @@ Alvarios reserved codes [1000 - 9999]
 """
 
 HANDSHAKE = 1020
+VIDEO_STREAM = 1100
