@@ -57,7 +57,7 @@ class UDPSocket:
             queue : The queue that stores received messages.
             socket : The socket object used for udp communication.
             is_running : A flag that specify if the socket is currently running.
-            key : The encryption key used to encrypt message. If no value is provided it will generate a new one.
+            _key : The encryption _key used to encrypt message. If no value is provided it will generate a new one.
             encoder : The encoder used to encrypt and decrypt messages.
             enable_multicast : Specify if the socket can use multicast.
             multicast_ttl : The TTL used for multicast.
@@ -82,7 +82,7 @@ class UDPSocket:
         :param encryption_in_transit: Define if the messages must be encrypted.
         :param max_queue_size: The max size of message queue.
         :param buffer_size: The max size of the received message buffer.
-        :param key: The encryption key used to encrypt message. If no value is provided it will generate a new one.
+        :param key: The encryption _key used to encrypt message. If no value is provided it will generate a new one.
         :param enable_multicast: Specify if the socket can use multicast.
         :param multicast_ttl: The TTL used for multicast.
         :param must_listen: Define if the socket must listen for messages.
@@ -97,7 +97,7 @@ class UDPSocket:
         self.queue: List[Tuple[bytes, Any]] = []
         self.socket: Union[socket.socket, None] = None
         self.is_running: bool = False
-        self.key: bytes = key if key is not None else generate_key_32()
+        self._key: bytes = key if key is not None else generate_key_32()
         self.encoder: Union[ChaCha20Poly1305, None] = None
         self.enable_multicast: bool = enable_multicast
         self.multicast_ttl: int = multicast_ttl
@@ -146,7 +146,7 @@ class UDPSocket:
     def _setup(self):
         """Setup function of the class."""
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        self.encoder = ChaCha20Poly1305(self.key)
+        self.encoder = ChaCha20Poly1305(self._key)
         self.socket.setblocking(self.setblocking)
         self.socket.bind((self.socket_ip, self.socket_port))
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -255,12 +255,12 @@ class UDPSocket:
         return self.external_pipe.recv()
 
     def _change_key(self, new_key: bytes) -> NoReturn:
-        """Change the encryption key of the socket and create a new encoder.
+        """Change the encryption _key of the socket and create a new encoder.
 
-        :param new_key: The new key to use for encryption.
+        :param new_key: The new _key to use for encryption.
         """
-        self.key = new_key
-        self.encoder = ChaCha20Poly1305(self.key)
+        self._key = new_key
+        self.encoder = ChaCha20Poly1305(self._key)
 
     def _encrypt(self, msg: bytes) -> bytes:
         """Internal function used to encrypt data when encryption in transit is enabled.
@@ -285,3 +285,10 @@ class UDPSocket:
                                         b"")
         except:
             return encrypted_message
+
+    def get_key(self) -> bytes:
+        """Return the _key used by the socket for encryption.
+
+        :return: The encryption _key of the server.
+        """
+        return self._key
