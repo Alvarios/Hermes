@@ -6,7 +6,7 @@ VideoStream object as emitter and consumer.
 
 Press ESC to quit the example while running.
 """
-from hermes.streams.VideoStream import VideoStream
+from hermes.stream.VideoStream import VideoStream
 import cv2
 import datetime
 

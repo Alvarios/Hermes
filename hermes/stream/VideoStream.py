@@ -46,7 +46,7 @@ import cv2
 
 
 class VideoStream:
-    """A class to manage video streams.
+    """A class to manage video stream.
 
     This class inherit from Process to run the VideoStream on a different CPU core than parent process.
 
