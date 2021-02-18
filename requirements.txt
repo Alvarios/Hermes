@@ -1,4 +1,4 @@
 cffi==1.14.3
-cryptography==3.2.0
+cryptography==3.3.2
 numpy==1.19.2
 opencv-python==4.4.0.44
