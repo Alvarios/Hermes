@@ -26,7 +26,7 @@ setuptools.setup(
         "Development Status :: 3 - Alpha"
     ],
     license="GNU General Public License v3 (GPLv3)",
-    python_requires='>=3.6',
+    python_requires='>=3.8',
 )
 
 # python setup.py egg_info --egg-base=./
