@@ -129,12 +129,12 @@ class VideoTopic:
         if type(new_message) is not UDPMessage:
             return
         self.count_rcv_msg += 1
-        if int.from_bytes(new_message.message_nb, 'little') > self.nb_packet or int.from_bytes(new_message.message_nb,
+        if int.from_bytes(new_message.subtopic, 'little') > self.nb_packet or int.from_bytes(new_message.subtopic,
                                                                                                'little') <= 0:
             self.rcv_error = True
             return
-        self.rcv_messages[int.from_bytes(new_message.message_nb, 'little') - 1] = new_message
-        if new_message.check_crc() is False:
+        self.rcv_messages[int.from_bytes(new_message.subtopic, 'little') - 1] = new_message
+        if new_message.validate_integrity() is False:
             self.rcv_error = True
 
     def all_msg_received(self) -> bool:

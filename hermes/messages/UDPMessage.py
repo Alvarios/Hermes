@@ -65,10 +65,30 @@ class UDPMessage:
             TIME_CREATION_LENGTH : The number of bytes to store the time
             creation.
             TOPIC_LENGTH : The number of bytes to store topic.
-            MSG_NUMBER_LENGTH : The number of bytes to store subtopic.
+            SUBTOPIC_LENGTH : The number of bytes to store subtopic.
             CRC_LENGTH : The number of bytes to store crc.
             PADDING_VALUE : The value to use for padding.
             MSG_MAX_SIZE : The max size of user data in UDP datagrams.
+            MSG_ID_END_POS: The end position of the message ID block when the
+            message is represented as byte array.
+            TIME_CREATION_START_POS: The start position of time creation block
+            when the message is represented as byte array.
+            TIME_CREATION_END_POS: The end position of time creation block
+            when the message is represented as byte array.
+            TOPIC_START_POS: The start position of topic block when the message
+             is represented as byte array.
+            TOPIC_END_POS: The end position of topic block when the message
+             is represented as byte array.
+            SUBTOPIC_START_POS: The start position of subtopic block when
+            the message is represented as byte array.
+            SUBTOPIC_END_POS: The end position of subtopic block when
+            the message is represented as byte array.
+            PAYLOAD_START_POS: The start position of payload block when
+            the message is represented as byte array.
+            PAYLOAD_END_POS: The end position of payload block when the message
+             is represented as byte array.
+            CRC_START_POS: The start position of crc block when the message is
+            represented as byte array.
 
         Attributes :
             payload : The payload of the message.
@@ -82,15 +102,36 @@ class UDPMessage:
 
     """
 
+    # Message section size definition
+    MSG_MAX_SIZE = 65535  # Defined by UDP protocol
     MSG_ID_LENGTH = 4
     TIME_CREATION_LENGTH = 8
     TOPIC_LENGTH = 4
-    MSG_NUMBER_LENGTH = 4
+    SUBTOPIC_LENGTH = 4
     CRC_LENGTH = 4
     PADDING_VALUE = 0
-    MSG_MAX_SIZE = 65535
     PAYLOAD_MAX_SIZE = MSG_MAX_SIZE - MSG_ID_LENGTH - TIME_CREATION_LENGTH - \
-                       TOPIC_LENGTH - MSG_NUMBER_LENGTH - CRC_LENGTH
+                       TOPIC_LENGTH - SUBTOPIC_LENGTH - CRC_LENGTH
+
+    # Message section start and stop position definition
+    MSG_ID_END_POS = MSG_ID_LENGTH
+
+    TIME_CREATION_START_POS = MSG_ID_END_POS
+    TIME_CREATION_END_POS = TIME_CREATION_START_POS + TIME_CREATION_LENGTH
+
+    TOPIC_START_POS = TIME_CREATION_END_POS
+    TOPIC_END_POS = TOPIC_START_POS + TOPIC_LENGTH
+
+    SUBTOPIC_START_POS = TOPIC_END_POS
+    SUBTOPIC_END_POS = SUBTOPIC_START_POS + SUBTOPIC_LENGTH
+
+    PAYLOAD_START_POS = SUBTOPIC_END_POS
+
+    # Payload size will vary so PAYLOAD_END_POS must be defined from the end
+    # of the message
+    PAYLOAD_END_POS = - CRC_LENGTH
+
+    CRC_START_POS = PAYLOAD_END_POS
 
     def __init__(self, code: Optional[Union[bytes, int]] = bytes(),
                  payload: Optional[Union[bytes, str]] = bytes(),
@@ -116,35 +157,41 @@ class UDPMessage:
         if type(topic) == int:
             topic = topic.to_bytes(UDPMessage.TOPIC_LENGTH, 'little')
         if type(subtopic) == int:
-            subtopic = subtopic.to_bytes(UDPMessage.MSG_NUMBER_LENGTH,
+            subtopic = subtopic.to_bytes(UDPMessage.SUBTOPIC_LENGTH,
                                          'little')
 
         if len(code) > UDPMessage.MSG_ID_LENGTH:
             raise ValueError
         if len(topic) > UDPMessage.TOPIC_LENGTH:
             raise ValueError
-        if len(subtopic) > UDPMessage.MSG_NUMBER_LENGTH:
+        if len(subtopic) > UDPMessage.SUBTOPIC_LENGTH:
             raise ValueError
 
         self.payload: bytes = payload
+
         self.msg_id: bytes = code + bytes([UDPMessage.PADDING_VALUE] * (
                 UDPMessage.MSG_ID_LENGTH - len(code)))
+
         self.time_creation: bytes = int(time.time() * 1_000_000).to_bytes(
             UDPMessage.TIME_CREATION_LENGTH, 'little')
+
         self.topic: bytes = topic + bytes([UDPMessage.PADDING_VALUE] * (
                 UDPMessage.TOPIC_LENGTH - len(topic)))
-        self.message_nb: bytes = subtopic + bytes(
+
+        self.subtopic: bytes = subtopic + bytes(
             [UDPMessage.PADDING_VALUE] * (
-                    UDPMessage.MSG_NUMBER_LENGTH - len(subtopic)))
+                    UDPMessage.SUBTOPIC_LENGTH - len(subtopic)))
+
         self.full_content = self.msg_id + self.time_creation + self.topic + \
-                            self.message_nb + self.payload
+                            self.subtopic + self.payload
+
         self.crc = zlib.crc32(self.full_content).to_bytes(
             UDPMessage.CRC_LENGTH, 'little')
 
-    def check_crc(self) -> bool:
-        """Return True if crc is correct else False.
+    def validate_integrity(self) -> bool:
+        """Return True if message contains no errors else False.
 
-        :return crc_correct: The result of crc check.
+        :return: The result of integrity check.
         """
         return self.crc == zlib.crc32(self.full_content).to_bytes(
             UDPMessage.CRC_LENGTH, 'little')
@@ -171,39 +218,32 @@ class UDPMessage:
         :param keep_if_corrupted: Return the message even if it is corrupted
         when set to True.
 
-        :return msg: The message if it is not corrupted else None.
+        :return: The message if it is not corrupted else None.
         """
-        msg_id = msg_bytes[: UDPMessage.MSG_ID_LENGTH]
-        time_creation = msg_bytes[
-                        UDPMessage.MSG_ID_LENGTH:
-                        UDPMessage.MSG_ID_LENGTH +
-                        UDPMessage.TIME_CREATION_LENGTH]
-        topic = msg_bytes[
-                UDPMessage.MSG_ID_LENGTH +
-                UDPMessage.TIME_CREATION_LENGTH:
-                UDPMessage.MSG_ID_LENGTH +
-                UDPMessage.TIME_CREATION_LENGTH +
-                UDPMessage.TOPIC_LENGTH]
-        message_nb = msg_bytes[
-                     UDPMessage.MSG_ID_LENGTH +
-                     UDPMessage.TIME_CREATION_LENGTH +
-                     UDPMessage.TOPIC_LENGTH:
-                     UDPMessage.MSG_ID_LENGTH +
-                     UDPMessage.TIME_CREATION_LENGTH +
-                     UDPMessage.TOPIC_LENGTH +
-                     UDPMessage.MSG_NUMBER_LENGTH]
+        msg_id = msg_bytes[: UDPMessage.MSG_ID_END_POS]
+
+        time_creation = msg_bytes[UDPMessage.TIME_CREATION_START_POS:
+                                  UDPMessage.TIME_CREATION_END_POS]
+
+        topic = msg_bytes[UDPMessage.TOPIC_START_POS: UDPMessage.TOPIC_END_POS]
+
+        subtopic = msg_bytes[UDPMessage.SUBTOPIC_START_POS:
+                             UDPMessage.SUBTOPIC_END_POS]
+
         payload = msg_bytes[
-                  UDPMessage.MSG_ID_LENGTH +
-                  UDPMessage.TIME_CREATION_LENGTH +
-                  UDPMessage.TOPIC_LENGTH +
-                  UDPMessage.MSG_NUMBER_LENGTH: -
+                  UDPMessage.PAYLOAD_START_POS: -
                   UDPMessage.CRC_LENGTH]
-        crc = msg_bytes[-UDPMessage.CRC_LENGTH:]
-        msg = UDPMessage(code=msg_id, payload=payload, subtopic=message_nb,
+
+        crc = msg_bytes[UDPMessage.CRC_START_POS:]
+
+        msg = UDPMessage(code=msg_id, payload=payload, subtopic=subtopic,
                          topic=topic)
+
         msg.time_creation = time_creation
         msg.crc = crc
         msg.full_content = msg.msg_id + msg.time_creation + msg.topic + \
-                           msg.message_nb + msg.payload
-        if msg.check_crc() or keep_if_corrupted:
+                           msg.subtopic + msg.payload
+
+        if msg.validate_integrity() or keep_if_corrupted:
             return msg
+        return None

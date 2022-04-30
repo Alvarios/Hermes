@@ -80,7 +80,7 @@ class TopicManager:
         :param new_message: The message to process.
         """
         topic = int.from_bytes(new_message.topic, 'little')
-        msg_nb = int.from_bytes(new_message.message_nb, 'little')
+        msg_nb = int.from_bytes(new_message.subtopic, 'little')
         if msg_nb == 0 and (topic not in self.open_topic.keys()):
             self.open_topic[topic] = VideoTopic.from_message(new_message)
             self.process_dlq(topic)
