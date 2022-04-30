@@ -35,7 +35,7 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 from typing import Optional, Union, NoReturn, List
 from hermes.messages.UDPMessage import UDPMessage
 from cryptography.hazmat.primitives import serialization
-import hermes.messages.codes as codes
+import hermes.domain.message_codes as codes
 from cryptography.hazmat.primitives.asymmetric import ec
 from hermes.security.utils import verify_password_scrypt, derive_key_hkdf
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305

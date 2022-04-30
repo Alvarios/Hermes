@@ -31,13 +31,16 @@ if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 """
-
+from __future__ import annotations
+# TODO: Remove future import in the future (python version > 3.10?)
 from typing import Union, Optional
 import time
 import zlib
 
+from hermes.domain.CheckedMessage import CheckedMessage
 
-class UDPMessage:
+
+class UDPMessage(CheckedMessage):
     """A class that represent a general message that can be used for UDP
     communication.
 
@@ -189,7 +192,7 @@ class UDPMessage:
             UDPMessage.CRC_LENGTH, 'little')
 
     def validate_integrity(self) -> bool:
-        """Return True if message contains no errors else False.
+        """Return True if message is valid else False.
 
         :return: The result of integrity check.
         """
@@ -202,13 +205,13 @@ class UDPMessage:
         The format of the message in bytes is the following :
             code - time_creation - topic - subtopic - payload - crc
 
-        :return msg_bytes: The message converted into bytes.
+        :return: The message converted into bytes.
         """
         return self.full_content + self.crc
 
     @staticmethod
     def from_bytes(msg_bytes: bytes,
-                   keep_if_corrupted: Optional[bool] = False):
+                   keep_if_corrupted: Optional[bool] = False) -> UDPMessage:
         """Create a new message from bytes.
 
         This function create a new message from a given byte array.

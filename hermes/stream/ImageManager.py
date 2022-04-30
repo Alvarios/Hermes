@@ -40,7 +40,7 @@ from typing import Optional, Union, NoReturn
 import cv2
 import numpy as np
 
-from hermes.messages import codes as codes
+from hermes.domain import message_codes as codes
 from hermes.messages.UDPMessage import UDPMessage
 
 

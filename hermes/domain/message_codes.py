@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Messages codes for unified communication code system.
 
+    Use these constant when needed instead of raw value to prevent issues in
+    case of future changes.
+
     Copyright (C) 2020  Clement Dulouard
 
     This program is free software: you can redistribute it and/or modify
