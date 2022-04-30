@@ -16,6 +16,14 @@ class CheckedMessage(Message):
         """
         raise NotImplemented
 
+    @abstractmethod
+    def validate_integrity(self) -> bool:
+        """Return True if message is valid else False.
+
+        :return: The result of integrity check.
+        """
+        raise NotImplemented
+
     @staticmethod
     @abstractmethod
     def from_bytes(raw_message: bytes, keep_if_corrupted: Optional[
@@ -30,12 +38,5 @@ class CheckedMessage(Message):
         when set to True.
 
         :return: A CheckedMessage if it is not corrupted else None.
-        """
-        raise NotImplemented
-
-    def validate_integrity(self) -> bool:
-        """Return True if message is valid else False.
-
-        :return: The result of integrity check.
         """
         raise NotImplemented

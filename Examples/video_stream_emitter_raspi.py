@@ -7,7 +7,7 @@ The consumer of this script can be the script video_stream_consumer.py
 
 from hermes.stream.VideoStream import VideoStream
 import cv2
-from hermes.polypheme.Eye import Eye
+from hermes.polypheme.CV2AsynchronousVideoCapture import CV2AsynchronousVideoCapture
 
 if __name__ == "__main__":
     emitter_ip = input("Ip address of emitter : \n")
@@ -20,11 +20,11 @@ if __name__ == "__main__":
     emitter = VideoStream(role=VideoStream.EMITTER, socket_ip=emitter_address_port[0],
                           socket_port=emitter_address_port[1], run_new_process=False, encoding=1,
                           encoding_param=encoding_param).start()
-    eye = Eye(src=0, run_new_process=False).start()
+    eye = CV2AsynchronousVideoCapture(src=0, run_new_process=False).start()
     while emitter.get_is_running() is False:
         pass
-    while eye.read() is None:
+    while eye.read_frame() is None:
         pass
     emitter.add_subscriber(consumer_address_port)
     while True:
-        emitter.refresh_image(eye.read())
+        emitter.refresh_image(eye.read_frame())

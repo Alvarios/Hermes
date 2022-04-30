@@ -38,7 +38,7 @@ from hermes.messages.UDPMessage import UDPMessage
 from hermes.network.UDPSocket import UDPSocket
 import multiprocessing as mp
 import time
-from hermes.polypheme.Eye import Eye
+from hermes.polypheme.CV2AsynchronousVideoCapture import CV2AsynchronousVideoCapture
 from threading import Thread
 from hermes.stream.ImageManager import ImageManager
 from hermes.stream.TopicManager import TopicManager
@@ -55,8 +55,8 @@ class VideoStream:
             CONSUMER : Value that tell the VideoStream will receive video stream.
 
         Attributes :
-            internal_pipe : Internal side of the pipe used for communication with the process.
-            external_pipe : External side of the pipe used for communication with the process.
+            _internal_pipe : Internal side of the pipe used for communication with the process.
+            _external_pipe : External side of the pipe used for communication with the process.
             im : The ImageManager used for video stream.
             role : Tell if the VideoStream is emitter or consumer.
             opened_topics : A list of VideoTopic waiting for completion.
@@ -66,7 +66,7 @@ class VideoStream:
             encryption_in_transit : Define if the messages must be encrypted.
             max_queue_size : The max size of message queue.
             buffer_size : The max size of the received message buffer.
-            is_running : Tell if the process is running.
+            _is_running : Tell if the process is running.
             key : The encryption key used to encrypt message. If no value is provided it will generate a new one.
             enable_multicast : Specify if the socket can use multicast.
             multicast_ttl : The TTL used for multicast.
@@ -74,8 +74,8 @@ class VideoStream:
             use_rcv_img_buffer : A bool that tell if received image are stored in a buffer or in a single variable.
             rcv_img_buffer : A buffer to store incoming image.
             from_source : Specify the source to use if needed.
-            eye : The Eye object used to stream if from_source is not None.
-            run_new_process : Specify if the Eye object must be run in a new process.
+            eye : The CV2AsynchronousVideoCapture object used to stream if from_source is not None.
+            _run_new_process : Specify if the CV2AsynchronousVideoCapture object must be run in a new process.
             async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
             encoding: Define the encoding used to send images.
             encoding_param : Parameters used to encode image. See cv2.imencode for more details.
@@ -106,7 +106,7 @@ class VideoStream:
         :param multicast_ttl: A list of tuples containing ip address and port of subscribers.
         :param use_rcv_img_buffer: A bool that tell if received image are stored in a buffer or in a single variable.
         :param from_source: Make the VideoStream stream from a source.
-        :param run_new_process: Specify if the Eye object must be run in a new process.
+        :param run_new_process: Specify if the CV2AsynchronousVideoCapture object must be run in a new process.
         :param async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
         :param encoding: Define the encoding used to send images.
         :param encoding_param: Parameters used to encode image. See cv2.imencode for more details.
@@ -137,7 +137,7 @@ class VideoStream:
         if use_rcv_img_buffer is False:
             self.rcv_img_buffer.append(None)
         self.from_source = from_source
-        self.eye: Union[None, Eye] = None
+        self.eye: Union[None, CV2AsynchronousVideoCapture] = None
         self.run_new_process = run_new_process
         self.async_msg_generation = async_msg_generation
         self.encoding = encoding
@@ -210,7 +210,7 @@ class VideoStream:
                                     buffer_size=self.buffer_size, key=self.key, enable_multicast=self.enable_multicast,
                                     multicast_ttl=self.multicast_ttl, must_listen=must_listen)
         self.udp_socket.start()
-        self.eye = None if self.from_source is None else Eye(src=self.from_source, run_new_process=False).start()
+        self.eye = None if self.from_source is None else CV2AsynchronousVideoCapture(src=self.from_source, run_new_process=False).start()
         self.im = self.im.start()
         self.is_running = True
 
@@ -227,7 +227,7 @@ class VideoStream:
             # Send image packets if the VideoStream object is emitter.
             if self.role == VideoStream.EMITTER:
                 if self.eye is not None:
-                    self.im.refresh_image(self.eye.read())
+                    self.im.refresh_image(self.eye.read_frame())
                 self.cast(img_topic)
                 img_topic = (img_topic + 1) % max_topic
                 if self.run_new_process:
@@ -267,14 +267,14 @@ class VideoStream:
     def _get_is_running(self) -> bool:
         """Return True if the process is currently running.
 
-        :return is_running: A bool that tell if the process is currently running.
+        :return _is_running: A bool that tell if the process is currently running.
         """
         return self.is_running
 
     def get_is_running(self):
         """External call to _get_is_running.
 
-        :return is_running: A bool that tell if the process is currently running.
+        :return _is_running: A bool that tell if the process is currently running.
         """
         if self.run_new_process is False:
             return self._get_is_running()

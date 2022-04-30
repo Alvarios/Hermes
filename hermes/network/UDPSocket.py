@@ -56,16 +56,16 @@ class UDPSocket:
             buffer_size : The max size of the received message buffer.
             queue : The queue that stores received messages.
             socket : The socket object used for udp communication.
-            is_running : A flag that specify if the socket is currently running.
+            _is_running : A flag that specify if the socket is currently running.
             _key : The encryption _key used to encrypt message. If no value is provided it will generate a new one.
             encoder : The encoder used to encrypt and decrypt messages.
             enable_multicast : Specify if the socket can use multicast.
             multicast_ttl : The TTL used for multicast.
             must_listen : Define if the socket must listen for messages.
             setblocking : Define if the socket must block.
-            run_new_process : Specify if the UDPSocket instance must be run in a new process.
-            internal_pipe : Internal side of the pipe used for communication with the process.
-            external_pipe : External side of the pipe used for communication with the process.
+            _run_new_process : Specify if the UDPSocket instance must be run in a new process.
+            _internal_pipe : Internal side of the pipe used for communication with the process.
+            _external_pipe : External side of the pipe used for communication with the process.
     """
     NONCE_LENGTH = 12
 

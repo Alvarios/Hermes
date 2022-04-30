@@ -40,7 +40,7 @@ from typing import Optional, Union, NoReturn
 import cv2
 import numpy as np
 
-from hermes.domain import message_codes as codes
+from hermes.domain import MessageCodes as codes
 from hermes.messages.UDPMessage import UDPMessage
 
 
@@ -65,7 +65,7 @@ class ImageManager:
             max_packet_size : The max size of a packet (in byte).
             async_msg_generation : Specify if the messages representing the image must be generated asynchronously.
             messages : The asynchronously generated messages.
-            is_running : Specify if the associated Thread is running (used for async message processing).
+            _is_running : Specify if the associated Thread is running (used for async message processing).
             encoding : Define the encoding used to send images.
             encoding_param: Parameters used to encode image. See cv2.imencode for more details.
                 Example for jpg encoding : encoding_param = {"params": [int(cv2.IMWRITE_JPEG_QUALITY), 50]} where 50

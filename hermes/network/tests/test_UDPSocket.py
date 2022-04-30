@@ -109,7 +109,7 @@ def test_udp_socket_can_start_and_stop_its_thread():
     time.sleep(.5)
 
     # Then
-    assert udp_socket.is_running is False
+    assert udp_socket._is_running is False
 
 
 def test_socket_can_receive_message_while_running():

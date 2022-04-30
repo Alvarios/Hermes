@@ -2,7 +2,7 @@ from hermes.security.Handshake import Handshake
 import os
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from hermes.messages.UDPMessage import UDPMessage
-import hermes.domain.message_codes as codes
+import hermes.domain.MessageCodes as codes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from hermes.security.utils import derive_password_scrypt

@@ -83,8 +83,8 @@ def test_video_stream_create_two_connection_pipe():
     vs = VideoStream(socket_port=60006).start()
 
     # Then
-    assert type(vs.external_pipe) is not None
-    assert type(vs.internal_pipe) is not None
+    assert type(vs._external_pipe) is not None
+    assert type(vs._internal_pipe) is not None
 
     vs.stop()
 
