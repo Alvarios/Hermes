@@ -7,7 +7,7 @@ The consumer of this script can be the script video_stream_consumer.py
 
 from hermes.stream.VideoStream import VideoStream
 import cv2
-from hermes.polypheme.CV2AsynchronousVideoCapture import CV2AsynchronousVideoCapture
+from hermes.camera.CV2AsynchronousVideoCapture import CV2AsynchronousVideoCapture
 
 if __name__ == "__main__":
     emitter_ip = input("Ip address of emitter : \n")

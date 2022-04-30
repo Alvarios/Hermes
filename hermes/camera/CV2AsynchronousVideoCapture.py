@@ -48,15 +48,16 @@ class CV2AsynchronousVideoCapture(AsynchronousVideoCapture):
     """Implementation of a class for non-blocking video recording using OpenCv.
 
         Attributes :
-            _vc : The VideoCapture object used to read the camera.
-            _frame : The last _frame read on the camera.
-            _run_new_process : Specify if the CV2AsynchronousVideoCapture
+            _vc: The VideoCapture object used to read the camera.
+            _src: The video source number to use for recording
+            _frame: The last _frame read on the camera.
+            _run_new_process: Specify if the CV2AsynchronousVideoCapture
             object must be run in a new process.
-            _refresh_time : Store the time spent to read the last _frame in
+            _refresh_time: Store the time spent to read the last _frame in
             second.
-            _internal_pipe : Internal side of the pipe used for communication
+            _internal_pipe: Internal side of the pipe used for communication
             with the process.
-            _external_pipe : External side of the pipe used for communication
+            _external_pipe: External side of the pipe used for communication
             with the process.
     """
 
@@ -68,10 +69,9 @@ class CV2AsynchronousVideoCapture(AsynchronousVideoCapture):
         :param run_new_process: Specify if the CV2AsynchronousVideoCapture
         instance must be run in a new process.
         """
-        self._vc = cv2.VideoCapture(src)
-        (new_frame_available, frame) = self._vc.read()
-        if new_frame_available:
-            self._frame = frame
+        self._vc = None
+        self._src = src
+        self._frame = None
         self._is_running = False
         self._run_new_process = run_new_process
         self._refresh_time = 1
@@ -84,6 +84,7 @@ class CV2AsynchronousVideoCapture(AsynchronousVideoCapture):
 
     def _setup(self) -> None:
         """Setup function of the class."""
+        self._vc = cv2.VideoCapture(self._src)
         self._is_running = True
 
     def _loop(self) -> NoReturn:

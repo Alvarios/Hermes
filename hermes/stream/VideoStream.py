@@ -38,7 +38,7 @@ from hermes.messages.UDPMessage import UDPMessage
 from hermes.network.UDPSocket import UDPSocket
 import multiprocessing as mp
 import time
-from hermes.polypheme.CV2AsynchronousVideoCapture import CV2AsynchronousVideoCapture
+from hermes.camera.CV2AsynchronousVideoCapture import CV2AsynchronousVideoCapture
 from threading import Thread
 from hermes.stream.ImageManager import ImageManager
 from hermes.stream.TopicManager import TopicManager
