@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="hermes-alvarios",
-    version="0.2.5",
+    version="0.3.0",
     author="CDulouard",
     author_email="clement.dulouard@alvarios.com",
     description="Network tools for python.",
@@ -15,7 +15,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=[
         'cffi',
-        "cryptography",
+        'cryptography',
         'numpy',
         'opencv-python'
     ],
@@ -26,7 +26,7 @@ setuptools.setup(
         "Development Status :: 3 - Alpha"
     ],
     license="GNU General Public License v3 (GPLv3)",
-    python_requires='>=3.6',
+    python_requires='>=3.8',
 )
 
 # python setup.py egg_info --egg-base=./

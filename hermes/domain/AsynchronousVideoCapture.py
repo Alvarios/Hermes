@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Messages codes for unified communication code system.
+"""Abstract Base Class for a non-blocking video recorder.
 
-    Copyright (C) 2020  Clement Dulouard
+
+    Copyright (C) 2022  Clement Dulouard
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published
@@ -32,42 +33,39 @@ For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 """
 
-"""
-Verbs [0-99]
-"""
-HEALTH_CHECK = 0
-GET = 1
-HEAD = 2
-POST = 3
-PUT = 4
-DELETE = 5
-CONNECT = 6
-OPTIONS = 7
-TRACE = 8
-PATCH = 9
+from __future__ import annotations
+# TODO: Remove future import in the future (python version > 3.10?)
+from abc import ABC, abstractmethod
+import numpy as np
 
-"""
-Status code [100 - 999]
-"""
-CONTINUE = 100
-PROCESSING = 102
 
-OK = 200
-NO_CONTENT = 204
-PARTIAL_CONTENT = 206
+class AsynchronousVideoCapture(ABC):
 
-BAD_REQUEST = 400
-UNAUTHORIZED = 401
-FORBIDDEN = 403
-TOO_MANY_REQUEST = 429
+    @abstractmethod
+    def start(self) -> AsynchronousVideoCapture:
+        """Start an AsynchronousVideoCapture and returns the current instance.
 
-NOT_IMPLEMENTED = 501
-NETWORK_AUTHENTICATION_REQUIRED = 511
-UNKNOWN_ERROR = 520
+        :return: The current instance of the class.
+        """
+        raise NotImplemented
 
-"""
-Alvarios reserved codes [1000 - 9999]
-"""
+    @abstractmethod
+    def stop(self) -> None:
+        """Stop the AsynchronousVideoCapture process"""
+        raise NotImplemented
 
-HANDSHAKE = 1020
-VIDEO_STREAM = 1100
+    @abstractmethod
+    def read_frame(self) -> np.array:
+        """Return the last _frame read on the camera.
+
+        :return: The last _frame captured by the video source.
+        """
+        raise NotImplemented
+
+    @abstractmethod
+    def get_frame_rate(self) -> float:
+        """Return the current _frame rate of the video capture.
+
+        :return: The current _frame rate of the video capture.
+        """
+        raise NotImplemented

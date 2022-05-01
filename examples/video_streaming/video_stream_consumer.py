@@ -44,4 +44,4 @@ if __name__ == "__main__":
     dt = stop - start
     print("Average IPS : ", cpt / dt.total_seconds())
     cv2.destroyWindow("preview")
-    consumer.stop()
+    consumer.time_stop()
