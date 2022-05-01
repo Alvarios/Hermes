@@ -1,4 +1,13 @@
-cffi==1.14.3
-cryptography==3.3.2
-numpy==1.19.2
-opencv-python==4.4.0.44
+attrs>=21.4.0
+cffi>=1.15.0
+cryptography>=37.0.1
+iniconfig>=1.1.1
+numpy>=1.22.3
+opencv-python>=4.5.5.64
+packaging>=21.3
+pluggy>=1.0.0
+py>=1.11.0
+pycparser>=2.21
+pyparsing>=3.0.8
+pytest>=7.1.2
+tomli>=2.0.1

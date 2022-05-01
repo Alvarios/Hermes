@@ -172,6 +172,6 @@ def test_get_messages_correctly_return_a_list_of_message_to_send_that_represent_
     assert collections.Counter(UDPMessage.from_bytes(result[0]).payload) == collections.Counter(list(expected_header))
     for i in range(1, len(result)):
         msg = UDPMessage.from_bytes(result[i])
-        assert int.from_bytes(msg.message_nb, 'little') == i
+        assert int.from_bytes(msg.subtopic, 'little') == i
         assert int.from_bytes(msg.topic, 'little') == expected_topic
         assert msg.payload == bytes(64 * [0])

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Implementation of a class that can be used to stream video using UDP protocol.
+"""Implementation of a class that can be used to stream video using UDP.
 
     Copyright (C) 2020  Clement Dulouard
 
@@ -31,14 +31,16 @@ if any, to sign a "copyright disclaimer" for the program, if necessary.
 For more information on this, and how to apply and follow the GNU AGPL, see
 <https://www.gnu.org/licenses/>.
 """
-
+from __future__ import annotations
+# TODO: Remove future import in the future (python version > 3.10?)
 import numpy as np
 from typing import Optional, NoReturn, List, Union, Tuple
 from hermes.messages.UDPMessage import UDPMessage
-from hermes.network.UDPSocket import UDPSocket
+from hermes.network.AsyncUDPChannel import AsyncUDPChannel
 import multiprocessing as mp
 import time
-from hermes.polypheme.Eye import Eye
+from hermes.camera.CV2AsynchronousVideoCapture import \
+    CV2AsynchronousVideoCapture
 from threading import Thread
 from hermes.stream.ImageManager import ImageManager
 from hermes.stream.TopicManager import TopicManager
@@ -48,15 +50,19 @@ from hermes.stream.VideoTopic import VideoTopic
 class VideoStream:
     """A class to manage video stream.
 
-    This class inherit from Process to run the VideoStream on a different CPU core than parent process.
+    This class inherit from Process to run the VideoStream on a different CPU
+    core than parent process.
 
         Constants :
             EMITTER : Value that tell the VideoStream will send video stream.
-            CONSUMER : Value that tell the VideoStream will receive video stream.
+            CONSUMER : Value that tell the VideoStream will receive video
+            stream.
 
         Attributes :
-            internal_pipe : Internal side of the pipe used for communication with the process.
-            external_pipe : External side of the pipe used for communication with the process.
+            internal_pipe : Internal side of the pipe used for communication
+            with the process.
+            external_pipe : External side of the pipe used for communication
+            with the process.
             im : The ImageManager used for video stream.
             role : Tell if the VideoStream is emitter or consumer.
             opened_topics : A list of VideoTopic waiting for completion.
@@ -66,31 +72,45 @@ class VideoStream:
             encryption_in_transit : Define if the messages must be encrypted.
             max_queue_size : The max size of message queue.
             buffer_size : The max size of the received message buffer.
-            is_running : Tell if the process is running.
-            key : The encryption key used to encrypt message. If no value is provided it will generate a new one.
+            _is_running : Tell if the process is running.
+            key : The encryption key used to encrypt message. If no value is
+            provided it will generate a new one.
             enable_multicast : Specify if the socket can use multicast.
             multicast_ttl : The TTL used for multicast.
-            subs_list : A list of tuples containing ip address and port of subscribers.
-            use_rcv_img_buffer : A bool that tell if received image are stored in a buffer or in a single variable.
+            subs_list : A list of tuples containing ip address and port of
+            subscribers.
+            use_rcv_img_buffer : A bool that tell if received image are stored
+            in a buffer or in a single variable.
             rcv_img_buffer : A buffer to store incoming image.
             from_source : Specify the source to use if needed.
-            eye : The Eye object used to stream if from_source is not None.
-            run_new_process : Specify if the Eye object must be run in a new process.
-            async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
+            video_recorder : The CV2AsynchronousVideoCapture object used to
+            stream if from_source is not None.
+            _run_new_process : Specify if the CV2AsynchronousVideoCapture
+            object must be run in a new process.
+            async_msg_generation: Specify if the messages representing the
+            image must be generated asynchronously.
             encoding: Define the encoding used to send images.
-            encoding_param : Parameters used to encode image. See cv2.imencode for more details.
+            encoding_param : Parameters used to encode image.
+            See cv2.imencode for more details.
     """
     EMITTER = "emitter"
     CONSUMER = "consumer"
 
-    def __init__(self, role: Optional[str] = EMITTER, max_packet_size: Optional[int] = 60000,
+    def __init__(self, role: Optional[str] = EMITTER,
+                 max_packet_size: Optional[int] = 60000,
                  socket_ip: Optional[str] = "127.0.0.1",
-                 socket_port: Optional[int] = 50000, encryption_in_transit: Optional[bool] = False,
-                 max_queue_size: Optional[int] = 100, buffer_size: Optional[int] = 65543,
-                 key: Optional[Union[None, bytes]] = None, enable_multicast: Optional[bool] = False,
-                 multicast_ttl: Optional[int] = 2, use_rcv_img_buffer: Optional[bool] = False,
-                 from_source: Optional[Union[int, str]] = None, run_new_process: Optional[bool] = True,
-                 async_msg_generation: Optional[bool] = False, encoding: Optional[int] = 0,
+                 socket_port: Optional[int] = 50000,
+                 encryption_in_transit: Optional[bool] = False,
+                 max_queue_size: Optional[int] = 100,
+                 buffer_size: Optional[int] = 65543,
+                 key: Optional[Union[None, bytes]] = None,
+                 enable_multicast: Optional[bool] = False,
+                 multicast_ttl: Optional[int] = 2,
+                 use_rcv_img_buffer: Optional[bool] = False,
+                 from_source: Optional[Union[int, str]] = None,
+                 run_new_process: Optional[bool] = True,
+                 async_msg_generation: Optional[bool] = False,
+                 encoding: Optional[int] = 0,
                  encoding_param: Optional[Union[dict, None]] = None):
         """Create a new VideoStream object with given parameter.
 
@@ -101,24 +121,33 @@ class VideoStream:
         :param encryption_in_transit: Define if the messages must be encrypted.
         :param max_queue_size: The max size of message queue.
         :param buffer_size: The max size of the received message buffer.
-        :param key: The encryption key used to encrypt message. If no value is provided it will generate a new one.
+        :param key: The encryption key used to encrypt message. If no value is
+        provided it will generate a new one.
         :param enable_multicast: Specify if the socket can use multicast.
-        :param multicast_ttl: A list of tuples containing ip address and port of subscribers.
-        :param use_rcv_img_buffer: A bool that tell if received image are stored in a buffer or in a single variable.
+        :param multicast_ttl: A list of tuples containing ip address and port
+        of subscribers.
+        :param use_rcv_img_buffer: A bool that tell if received image are
+         stored in a buffer or in a single variable.
         :param from_source: Make the VideoStream stream from a source.
-        :param run_new_process: Specify if the Eye object must be run in a new process.
-        :param async_msg_generation: Specify if the messages representing the image must be generated asynchronously.
+        :param run_new_process: Specify if the CV2AsynchronousVideoCapture
+        object must be run in a new process.
+        :param async_msg_generation: Specify if the messages representing the
+        image must be generated asynchronously.
         :param encoding: Define the encoding used to send images.
-        :param encoding_param: Parameters used to encode image. See cv2.imencode for more details.
+        :param encoding_param: Parameters used to encode image.
+        See cv2.imencode for more details.
         """
         self.internal_pipe, self.external_pipe = mp.Pipe()
         if role != VideoStream.EMITTER and role != VideoStream.CONSUMER:
             raise ValueError
         self.role = role
-        self.im: ImageManager = ImageManager(max_packet_size=max_packet_size, async_msg_generation=async_msg_generation,
-                                             encoding=encoding, encoding_param=encoding_param)
+        self.im: ImageManager = \
+            ImageManager(max_packet_size=max_packet_size,
+                         async_msg_generation=async_msg_generation,
+                         encoding=encoding,
+                         encoding_param=encoding_param)
         self.opened_topics: List[VideoTopic] = []
-        self.udp_socket: Union[UDPSocket, None] = None
+        self.udp_socket: Union[AsyncUDPChannel, None] = None
         self.socket_ip = socket_ip
         self.socket_port = socket_port
         self.encryption_in_transit: bool = encryption_in_transit
@@ -137,16 +166,17 @@ class VideoStream:
         if use_rcv_img_buffer is False:
             self.rcv_img_buffer.append(None)
         self.from_source = from_source
-        self.eye: Union[None, Eye] = None
+        self.video_recorder: Union[None, CV2AsynchronousVideoCapture] = None
         self.run_new_process = run_new_process
         self.async_msg_generation = async_msg_generation
         self.encoding = encoding
-        self.encoding_param = encoding_param if encoding_param is not None else {}
+        self.encoding_param = \
+            encoding_param if encoding_param is not None else {}
 
-    def start(self) -> NoReturn:
+    def start(self) -> VideoStream:
         """Start a new thread or a new process for asynchronous camera reading.
 
-        :return eye: The current instance of the class.
+        :return: The current instance of the class.
         """
         if self.run_new_process is False:
             self._start()
@@ -154,25 +184,26 @@ class VideoStream:
             mp.Process(target=self._start).start()
         return self
 
-    def _start(self) -> NoReturn:
+    def _start(self) -> None:
         """Start the thread of the class."""
         Thread(target=self._work, args=()).start()
 
-    def _refresh_image(self, new_image: np.array) -> NoReturn:
+    def _refresh_image(self, new_image: np.array) -> None:
         """Change the value of current image by the value of new_image.
 
         :param new_image: The new image to send.
         """
         self.im.refresh_image(new_image)
 
-    def refresh_image(self, new_image: np.array) -> NoReturn:
+    def refresh_image(self, new_image: np.array) -> None:
         """External call to _refresh_image.
 
         :param new_image: The new image to send.
         """
         if self.run_new_process is False:
             return self._refresh_image(new_image)
-        self.external_pipe.send((VideoStream._refresh_image, {"new_image": new_image}))
+        self.external_pipe.send(
+            (VideoStream._refresh_image, {"new_image": new_image}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
@@ -180,14 +211,14 @@ class VideoStream:
     def _get_current_image(self) -> np.array:
         """Return the current value of current image.
 
-        :return current_image: The current value of current image.
+        :return: The current value of current image.
         """
         return self.im.current_image
 
     def get_current_image(self) -> np.array:
         """External call to _get_current_image
 
-        :return current_image: The current value of current image.
+        :return: The current value of current image.
         """
         if self.run_new_process is False:
             return self._get_current_image()
@@ -201,16 +232,23 @@ class VideoStream:
         self._setup()
         self._loop()
 
-    def _setup(self) -> NoReturn:
+    def _setup(self) -> None:
         """Initialization of the process."""
         must_listen = self.role == VideoStream.CONSUMER
-        self.udp_socket = UDPSocket(socket_ip=self.socket_ip, socket_port=self.socket_port,
-                                    encryption_in_transit=self.encryption_in_transit,
-                                    max_queue_size=self.max_queue_size,
-                                    buffer_size=self.buffer_size, key=self.key, enable_multicast=self.enable_multicast,
-                                    multicast_ttl=self.multicast_ttl, must_listen=must_listen)
+        self.udp_socket = \
+            AsyncUDPChannel(socket_ip=self.socket_ip,
+                            socket_port=self.socket_port,
+                            encryption_in_transit=self.encryption_in_transit,
+                            max_queue_size=self.max_queue_size,
+                            buffer_size=self.buffer_size,
+                            key=self.key,
+                            enable_multicast=self.enable_multicast,
+                            multicast_ttl=self.multicast_ttl,
+                            must_listen=must_listen)
         self.udp_socket.start()
-        self.eye = None if self.from_source is None else Eye(src=self.from_source, run_new_process=False).start()
+        self.video_recorder = \
+            None if self.from_source is None else CV2AsynchronousVideoCapture(
+                src=self.from_source, run_new_process=False).start()
         self.im = self.im.start()
         self.is_running = True
 
@@ -226,8 +264,8 @@ class VideoStream:
                     self.internal_pipe.send(command[0](self, **command[1]))
             # Send image packets if the VideoStream object is emitter.
             if self.role == VideoStream.EMITTER:
-                if self.eye is not None:
-                    self.im.refresh_image(self.eye.read())
+                if self.video_recorder is not None:
+                    self.im.refresh_image(self.video_recorder.read_frame())
                 self.cast(img_topic)
                 img_topic = (img_topic + 1) % max_topic
                 if self.run_new_process:
@@ -235,7 +273,7 @@ class VideoStream:
 
             # Receive packets if the VideoStream object is consumer.
             if self.role == VideoStream.CONSUMER:
-                while self.udp_socket.in_waiting():
+                while self.udp_socket.message_available():
                     msg = UDPMessage.from_bytes(self.udp_socket.pull()[0])
                     if type(msg) is not UDPMessage:
                         continue
@@ -246,16 +284,16 @@ class VideoStream:
                     else:
                         self.rcv_img_buffer[0] = self.tm.pull()
 
-    def _stop(self) -> NoReturn:
+    def _stop(self) -> None:
         """Stop the process and its UDPSocket."""
         self.is_running = False
         self.udp_socket.stop()
         if self.im.async_msg_generation is True:
             self.im.stop()
-        if self.eye is not None:
-            self.eye.stop()
+        if self.video_recorder is not None:
+            self.video_recorder.stop()
 
-    def stop(self) -> NoReturn:
+    def stop(self) -> None:
         """External call to _stop"""
         if self.run_new_process is False:
             return self._stop()
@@ -267,14 +305,14 @@ class VideoStream:
     def _get_is_running(self) -> bool:
         """Return True if the process is currently running.
 
-        :return is_running: A bool that tell if the process is currently running.
+        :return: A bool that tell if the process is currently running.
         """
         return self.is_running
 
     def get_is_running(self):
         """External call to _get_is_running.
 
-        :return is_running: A bool that tell if the process is currently running.
+        :return: A bool that tell if the process is currently running.
         """
         if self.run_new_process is False:
             return self._get_is_running()
@@ -283,21 +321,24 @@ class VideoStream:
             pass
         return self.external_pipe.recv()
 
-    def _add_subscriber(self, address_port) -> NoReturn:
+    def _add_subscriber(self, address_port) -> None:
         """Add a subscriber in the list of subscriber.
 
-        :param address_port: A tuple containing the ip address and the port of the new subscriber.
+        :param address_port: A tuple containing the ip address and the port of
+        the new subscriber.
         """
         self.subs_list.append(address_port)
 
-    def add_subscriber(self, address_port) -> NoReturn:
+    def add_subscriber(self, address_port) -> None:
         """External call to _add_subscriber.
 
-        :param address_port: A tuple containing the ip address and the port of the new subscriber.
+        :param address_port: A tuple containing the ip address and the port of
+        the new subscriber.
         """
         if self.run_new_process is False:
             return self._add_subscriber(address_port)
-        self.external_pipe.send((VideoStream._add_subscriber, {"address_port": address_port}))
+        self.external_pipe.send(
+            (VideoStream._add_subscriber, {"address_port": address_port}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
@@ -305,14 +346,14 @@ class VideoStream:
     def _get_subs_list(self) -> List[Tuple]:
         """Return the list of subscribers.
 
-        :return subs_list: The list of subscribers.
+        :return: The list of subscribers.
         """
         return self.subs_list
 
     def get_subs_list(self) -> List[Tuple]:
         """External call to _get_subs_list.
 
-        :return subs_list: The list of subscribers.
+        :return: The list of subscribers.
         """
         if self.run_new_process is False:
             return self._get_subs_list()
@@ -321,31 +362,33 @@ class VideoStream:
             pass
         return self.external_pipe.recv()
 
-    def _remove_subscriber(self, index: int) -> NoReturn:
+    def _remove_subscriber(self, index: int) -> None:
         """Remove a subscriber from the list of subscriber.
 
         :param index: The index of the subscriber to remove.
         """
         self.subs_list.pop(index)
 
-    def remove_subscriber(self, index: int) -> NoReturn:
+    def remove_subscriber(self, index: int) -> None:
         """External call to _remove_subscriber.
 
         :param index: The index of the subscriber to remove.
         """
         if self.run_new_process is False:
             return self._remove_subscriber(index)
-        self.external_pipe.send((VideoStream._remove_subscriber, {"index": index}))
+        self.external_pipe.send(
+            (VideoStream._remove_subscriber, {"index": index}))
         while self.external_pipe.poll() is False:
             pass
         return self.external_pipe.recv()
 
-    def cast(self, topic: int) -> NoReturn:
+    def cast(self, topic: int) -> None:
         """Send the current image using given topic number.
 
         :param topic: The number of the topic used to send the image.
         """
-        if np.array_equiv(self.im.current_image, np.array([])) or len(self.subs_list) == 0:
+        if np.array_equiv(self.im.current_image, np.array([])) or len(
+                self.subs_list) == 0:
             return
         for msg_to_send in self.im.get_messages(topic):
             for sub in self.subs_list:
@@ -356,7 +399,7 @@ class VideoStream:
     def _get_rcv_img(self) -> np.array:
         """Return the received image.
 
-        :return rcv_img: The received image.
+        :return: The received image.
         """
         if len(self.rcv_img_buffer) == 0:
             return None
@@ -367,7 +410,7 @@ class VideoStream:
     def get_rcv_img(self):
         """External call to _get_rcv_img.
 
-        :return rcv_img: The received image.
+        :return: The received image.
         """
         if self.run_new_process is False:
             return self._get_rcv_img()
@@ -396,13 +439,13 @@ class VideoStream:
         return self.external_pipe.recv()
 
     @staticmethod
-    def delay(delay_ms: int) -> NoReturn:
-        """Wait for delay_ms microseconds.
+    def delay(delay_ms: int) -> None:
+        """Wait for delay_ms microseconds with better precision than sleep().
 
         :param delay_ms: The delay duration in ms
         """
-        t_stop = np.int64(delay_ms * 10) + np.int64(np.float64(time.time()) * np.float64(10000000))
-        while np.int64(np.float64(time.time()) * np.float64(10000000)) <= t_stop:
+        t_stop = np.int64(delay_ms * 10) + np.int64(
+            np.float64(time.time()) * np.float64(10000000))
+        while np.int64(
+                np.float64(time.time()) * np.float64(10000000)) <= t_stop:
             pass
-
-

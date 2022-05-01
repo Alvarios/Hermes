@@ -87,25 +87,25 @@ def test_new_udp_message_created_with_correct_topic_when_type_int():
 
 def test_new_udp_message_created_with_correct_message_nb_when_type_bytes():
     # Given
-    message_nb = bytes(UDPMessage.MSG_NUMBER_LENGTH * [1])
+    message_nb = bytes(UDPMessage.SUBTOPIC_LENGTH * [1])
 
     # When
     msg = UDPMessage(subtopic=message_nb)
 
     # Then
-    assert msg.message_nb == message_nb
+    assert msg.subtopic == message_nb
 
 
 def test_new_udp_message_created_with_correct_message_nb_when_type_int():
     # Given
-    expected_message_nb = bytes([1] + (UDPMessage.MSG_NUMBER_LENGTH - 1) * [0])
+    expected_message_nb = bytes([1] + (UDPMessage.SUBTOPIC_LENGTH - 1) * [0])
     message_nb = 1
 
     # When
     msg = UDPMessage(subtopic=message_nb)
 
     # Then
-    assert msg.message_nb == expected_message_nb
+    assert msg.subtopic == expected_message_nb
 
 
 def test_new_udp_message_created_with_correct_crc():
@@ -117,7 +117,7 @@ def test_new_udp_message_created_with_correct_crc():
 
     # When
     msg = UDPMessage(subtopic=message_nb, payload=payload, code=msg_id, topic=topic)
-    full_content = msg.msg_id + msg.time_creation + msg.topic + msg.message_nb + msg.payload
+    full_content = msg.msg_id + msg.time_creation + msg.topic + msg.subtopic + msg.payload
     expected_crc = zlib.crc32(full_content).to_bytes(UDPMessage.CRC_LENGTH, 'little')
 
     # Then
@@ -176,7 +176,7 @@ def test_new_udp_message_created_with_correct_message_nb_length_when_input_too_s
     msg = UDPMessage(subtopic=msg_nb)
 
     # Then
-    assert len(msg.message_nb) == UDPMessage.MSG_NUMBER_LENGTH
+    assert len(msg.subtopic) == UDPMessage.SUBTOPIC_LENGTH
 
 
 def test_new_udp_message_throw_error_when_input_message_nb_too_big():
@@ -201,7 +201,7 @@ def test_check_crc_returns_true_when_crc_correct():
     msg = UDPMessage(subtopic=message_nb, payload=payload, code=msg_id, topic=topic)
 
     # Then
-    assert msg.check_crc() is True
+    assert msg.validate_integrity() is True
 
 
 def test_check_crc_returns_false_when_crc_incorrect():
@@ -216,7 +216,7 @@ def test_check_crc_returns_false_when_crc_incorrect():
     msg.full_content = bytes()
 
     # Then
-    assert msg.check_crc() is False
+    assert msg.validate_integrity() is False
 
 
 def test_to_bytes_returns_full_message_as_bytes():
@@ -236,7 +236,7 @@ def test_to_bytes_returns_full_message_as_bytes():
 
 def test_from_bytes_correctly_load_a_message():
     # Given
-    message_nb = bytes(UDPMessage.MSG_NUMBER_LENGTH * [1])
+    message_nb = bytes(UDPMessage.SUBTOPIC_LENGTH * [1])
     payload = bytes([49, 49, 49, 49])
     msg_id = bytes([48, 48, 48, 48])
     topic = bytes([1, 0, 0, 0])
@@ -249,7 +249,7 @@ def test_from_bytes_correctly_load_a_message():
     assert result.msg_id == msg_id
     assert result.time_creation == msg.time_creation
     assert result.topic == topic
-    assert result.message_nb == message_nb
+    assert result.subtopic == message_nb
     assert result.payload == payload
     assert result.crc == msg.crc
 

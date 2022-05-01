@@ -65,7 +65,7 @@ def test_add_msg_correctly_add_msg_to_an_existing_topic(get_msg_sample):
 
     # Then
     assert tm.open_topic[1].rcv_messages[0].payload == UDPMessage.from_bytes(messages[1]).payload
-    assert tm.open_topic[1].rcv_messages[0].message_nb == UDPMessage.from_bytes(messages[1]).message_nb
+    assert tm.open_topic[1].rcv_messages[0].subtopic == UDPMessage.from_bytes(messages[1]).subtopic
 
 
 def test_topic_exist_return_true_if_asked_topic_exist_else_return_false(get_msg_sample):
@@ -95,7 +95,7 @@ def test_add_msg_add_data_messages_to_dead_letter_queue_when_its_topic_does_not_
 
     # Then
     assert tm.dead_letter_queue[0].payload == UDPMessage.from_bytes(messages[1]).payload
-    assert tm.dead_letter_queue[0].message_nb == UDPMessage.from_bytes(messages[1]).message_nb
+    assert tm.dead_letter_queue[0].subtopic == UDPMessage.from_bytes(messages[1]).subtopic
 
 
 def test_add_msg_add_message_from_dlq_to_its_topic_when_it_is_created_and_remove_msg_from_dlq(get_msg_sample):
@@ -109,7 +109,7 @@ def test_add_msg_add_message_from_dlq_to_its_topic_when_it_is_created_and_remove
 
     # Then
     assert tm.open_topic[1].rcv_messages[0].payload == UDPMessage.from_bytes(messages[1]).payload
-    assert tm.open_topic[1].rcv_messages[0].message_nb == UDPMessage.from_bytes(messages[1]).message_nb
+    assert tm.open_topic[1].rcv_messages[0].subtopic == UDPMessage.from_bytes(messages[1]).subtopic
     assert len(tm.dead_letter_queue) == 0
 
 

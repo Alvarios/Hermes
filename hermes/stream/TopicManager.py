@@ -40,13 +40,15 @@ from hermes.stream.VideoTopic import VideoTopic
 
 
 class TopicManager:
-    """A class designed to manage the incoming messages in order to rebuild images.
+    """A class designed to manage the incoming messages in order to rebuild
+    images.
 
         Attributes :
-            open_topic : A dictionary of VideoTopic representing current open topic.
+            open_topic : A dictionary of VideoTopic representing current open
+            topic.
             img_queue : A list of images waiting to be pulled.
-            dead_letter_queue : A list of added data messages with no existing topic.
-
+            dead_letter_queue : A list of added data messages with no existing
+            topic.
     """
 
     def __init__(self) -> None:
@@ -58,33 +60,37 @@ class TopicManager:
     def in_waiting(self) -> bool:
         """Return True if an image is waiting in img_queue.
 
-        :return in_waiting: A boolean that tell if an image is waiting in img_queue.
+        :return: A boolean that tell if an image is waiting in img_queue.
         """
         return len(self.img_queue) > 0
 
     def add_message(self, new_message: UDPMessage) -> NoReturn:
-        """Read incoming message and do the needed action associated to the message.
+        """Read incoming message and do the work needed by the message.
 
-        This function contains three cases, the first one is when the added message requires the creation of a new
-        topic. The function will create the topic if it is possible and then will check the dead letter queue to
-        check if there are messages associated to this new topic. The outdated messages in the dlq will be deleted at
-        this step.
+        This function contains three cases, the first one is when the added
+        message requires the creation of a new
+        topic. The function will create the topic if it is possible and then
+        will check the dead letter queue to
+        check if there are messages associated to this new topic. The outdated
+        messages in the dlq will be deleted at this step.
 
-        The second case is when a data message is received. If the associated topic exists, the message will be added to
-        this topic. If the topic is completed with the incoming message, the image will be rebuild and
-        added to img_queue.
+        The second case is when a data message is received. If the associated
+        topic exists, the message will be added to
+        this topic. If the topic is completed with the incoming message, the
+        image will be rebuilt and added to img_queue.
 
-        The third case is when the message cannot be processed now. If it is the case it will be put in the dlq to be
-        processed later.
+        The third case is when the message cannot be processed now. If it is
+        the case it will be put in the dlq to be processed later.
 
         :param new_message: The message to process.
         """
         topic = int.from_bytes(new_message.topic, 'little')
-        msg_nb = int.from_bytes(new_message.message_nb, 'little')
+        msg_nb = int.from_bytes(new_message.subtopic, 'little')
         if msg_nb == 0 and (topic not in self.open_topic.keys()):
             self.open_topic[topic] = VideoTopic.from_message(new_message)
             self.process_dlq(topic)
-        elif topic in self.open_topic.keys() and self.open_topic[topic].nb_packet >= msg_nb:
+        elif topic in self.open_topic.keys() and self.open_topic[
+            topic].nb_packet >= msg_nb:
             self.open_topic[topic].add_message(new_message)
             self.check_topic(topic)
         else:
@@ -95,7 +101,7 @@ class TopicManager:
 
         :param topic_num: The id of the topic to check.
 
-        :return topic_exist: A boolean that tell if the topic exist.
+        :return: A boolean that tell if the topic exist.
         """
         return topic_num in self.open_topic.keys()
 
@@ -105,7 +111,7 @@ class TopicManager:
             self.dead_letter_queue.append(msg)
 
     def process_dlq(self, new_topic: int) -> NoReturn:
-        """Read messages in the dlq, add messages to an existing topic if possible and delete outdated ones.
+        """Reprocess message if possible and delete outdated ones.
 
         :param new_topic: The last topic created.
         """
@@ -137,9 +143,9 @@ class TopicManager:
             self.open_topic = keep_open
 
     def pull(self) -> np.array:
-        """Return the first image of img_queue if it is available.
+        """Returns the first image of img_queue if it is available.
 
-        :return new_img: The first image of the queue.
+        :return: The first image of the queue.
         """
         if self.in_waiting():
             return self.img_queue.pop(0)
